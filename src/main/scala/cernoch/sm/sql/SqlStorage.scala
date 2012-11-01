@@ -4,14 +4,14 @@ import cernoch.scalogic._
 import cernoch.scalogic.storage._
 import exceptions.SchemaMismash
 import java.sql.{ResultSet, PreparedStatement}
-import collection.mutable.ArrayBuffer
+import collection.mutable.{HashMap, ArrayBuffer}
 
 
 class SqlStorage(
     sett: SqlSettings,
     schema: List[BLC[Btom[Var]]])
   extends Transactioned[
-    Queriable[Clause[Atom[FFT], Set[Atom[FFT]]], Val[_]],
+    Queriable[Horn[Atom[FFT], Set[Atom[FFT]]], Val[_]],
     BLC[Atom[Val[_]]]] {
   storage =>
 
@@ -55,7 +55,7 @@ class SqlStorage(
 
     schema.map { _.head }.map(btom => {
       "CREATE TABLE " + i(tables(btom)) +
-        btom.vars.map(v => {
+        btom.variables.map(v => {
           i(cols(btom)(v)) + " " + sett.domainName(v.dom)
         }).mkString(" ( ", " , ", " )")
       })
@@ -176,7 +176,7 @@ class SqlStorage(
   }
 
   class Connection
-    extends Queriable[Clause[Atom[FFT], Set[Atom[FFT]]], Val[_]] {
+    extends Queriable[Horn[Atom[FFT], Set[Atom[FFT]]], Val[_]] {
 
     private def neighbours
     [T]
@@ -189,8 +189,7 @@ class SqlStorage(
 
 
     def query
-    (q: Clause[Atom[FFT],
-      Set[Atom[FFT]]])
+      (q: Horn[Atom[FFT], Set[Atom[FFT]]])
     = {
 
       //println(q.head + " :- " + q.body.mkString(", ") + ".")
@@ -204,7 +203,7 @@ class SqlStorage(
        * we simply use the '''Namer.name''' function, which
        * automatically ensures uniqueness.
        */
-      val atomName = Namer.name(q.body) {
+      val atomName = Namer.name(q.bodyAtoms) {
         atom =>
           tables(schema.find {
             _.head.pred == atom.pred
@@ -214,7 +213,7 @@ class SqlStorage(
       /**
        * Maps each atom (query) to the btom (schema)
        */
-      val atomBtom = q.body.map {
+      val atomBtom = q.bodyAtoms.map {
         atom =>
           atom -> schema.find {
             _.head.pred == atom.pred
@@ -224,11 +223,11 @@ class SqlStorage(
       /**
        * Occurances of each variable in the schema
        */
-      val avarsOcc = q.vars.toSet.map((v: Var) =>
+      val avarsOcc = q.variables.toSet.map((v: Var) =>
         v -> {
 
           // Go over each body atom
-          q.body.toList.map(atom => {
+          q.bodyAtoms.toList.map(atom => {
             val btom = atomBtom(atom)
 
             // find variables in archetype
@@ -252,7 +251,7 @@ class SqlStorage(
        */
 
       // Name variables in the head
-      val headCols = Namer.vars(q.head.vars)
+      val headCols = Namer.vars(q.head.variables)
 
       // Create the select
       val SELECT = new ArrayBuffer[String]()
@@ -276,7 +275,7 @@ class SqlStorage(
       /*
        * FROM
        */
-      val FROM = q.body.map {
+      val FROM = q.bodyAtoms.map {
         atom => {
           val relation = tables(atomBtom(atom))
           val nameForA = atomName(atom)
@@ -304,7 +303,7 @@ class SqlStorage(
       val BINDS = ArrayBuffer[Val[_]]()
 
       // Represent value binding
-      q.body.foreach(atom => {
+      q.bodyAtoms.foreach(atom => {
         val btom = atomBtom(atom)
 
         // and values in the atom
@@ -342,24 +341,28 @@ class SqlStorage(
           }
       }
 
+      // Result iterable
       new ResultIterable[Map[Var, Val[_]]](sql, result => {
-        q.head.args
-          .filter{ _.isInstanceOf[Var]}
-          .asInstanceOf[List[Var]]
-          .map {
-          hVar => hVar -> {
 
+        q.head.args.foldLeft(
+          Map[Var,Val[_]]()
+        ){ (map,term) => term match {
+
+          // Map each variable
+          case hVar:Var => {
             // Name of the headVar's column
             val col = headCols(hVar)
-
             // Get the result by the headVar name
-            hVar.dom match {
+            map + (hVar -> (hVar.dom match {
               case d@DecDom(_) => new Dec(BigDecimal(result.getBigDecimal(col)), d)
               case d@NumDom(_, _) => new Num(BigInt(result.getInt(col)), d)
               case d@CatDom(_, _, _) => new Cat(result.getString(col), d)
-            }
+            }).asInstanceOf[Val[_]])
           }
-        }.toMap
+
+          // Ignore other values
+          case _ => map
+        }}
       })
     }
   }
@@ -376,7 +379,8 @@ class SqlStorage(
    * @tparam T Type of the result
    */
   class ResultIterable[T]
-  (statement: PreparedStatement, getNext: ResultSet => T)
+    (statement: PreparedStatement,
+     getNext: ResultSet => T)
     extends Iterable[T] {
 
     def iterator = new Iterator[T] {

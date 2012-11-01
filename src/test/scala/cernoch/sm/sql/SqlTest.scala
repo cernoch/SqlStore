@@ -5,7 +5,6 @@ import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
 import cernoch.scalogic._
 import java.sql.DriverManager
-import storage.{Queriable, Transactioned}
 
 @RunWith(classOf[JUnitRunner])
 class SqlTest extends Specification {
@@ -26,19 +25,19 @@ class SqlTest extends Specification {
     import Dom._
 
     val franta = new Cat("franta", person)
-    val pepa = new Cat("pepa", person)
+    val pepa   = new Cat("pepa", person)
 
-    val red = new Cat("red", color)
+    val red   = new Cat("red", color)
     val white = new Cat("white", color)
 
     val skoda = new Cat("skoda", make)
     val smart = new Cat("smart", make)
 
-    val redForTwo = new Num(1, car)
+    val redForTwo   = new Num(1, car)
     val whiteForTwo = new Num(2, car)
-    val skodaFabia = new Num(3, car)
+    val skodaFabia  = new Num(3, car)
 
-    val twoDoors = new Num(2, doors)
+    val twoDoors  = new Num(2, doors)
     val fourDoors = new Num(4, doors)
   }
 
@@ -109,21 +108,21 @@ class SqlTest extends Specification {
 
       // Cars
 
-      input(cars.sflat(Map(
+      input(cars.mapAllArgs(Map(
         car1   -> redForTwo,
         make1  -> smart,
         color1 -> red,
         doors1 -> twoDoors
       )))
 
-      input(cars.sflat(Map(
+      input(cars.mapAllArgs(Map(
         car1   -> whiteForTwo,
         make1  -> smart,
         color1 -> white,
         doors1 -> twoDoors
       )))
 
-      input(cars.sflat(Map(
+      input(cars.mapAllArgs(Map(
         car1   -> skodaFabia,
         make1  -> skoda,
         color1 -> white,
@@ -132,32 +131,32 @@ class SqlTest extends Specification {
 
       // People
 
-      input(people.sflat(Map(
+      input(people.mapAllArgs(Map(
         person1 -> franta
       )))
 
-      input(people.sflat(Map(
+      input(people.mapAllArgs(Map(
         person1 -> pepa
       )))
 
       // Ownership
 
-      input(ownership.sflat(Map(
+      input(ownership.mapAllArgs(Map(
         person1 -> pepa,
         car1    -> redForTwo
       )))
 
-      input(ownership.sflat(Map(
+      input(ownership.mapAllArgs(Map(
         person1 -> pepa,
         car1    -> whiteForTwo
       )))
 
-      input(ownership.sflat(Map(
+      input(ownership.mapAllArgs(Map(
         person1 -> franta,
         car1    -> whiteForTwo
       )))
 
-      input(ownership.sflat(Map(
+      input(ownership.mapAllArgs(Map(
         person1 -> franta,
         car1    -> skodaFabia
       )))
@@ -166,14 +165,12 @@ class SqlTest extends Specification {
 
 
 
-      val res1 = engine.query(new Clause(
+      val res1 = engine.query(new Horn(
         Atom("head", List[FFT](person1, doors1)),
         Set(
-          people,
-          ownership,
-          (cars subst Map[Term,Term](
-            color1 -> white
-          ).get).asInstanceOf[Atom[FFT]]
+          (people.asInstanceOf[Atom[Var]]),
+          (ownership),
+          (cars mapSomeArg Dict(color1 -> white).get)
         )
       ))
       .toSet
@@ -185,13 +182,11 @@ class SqlTest extends Specification {
         (franta, fourDoors)
       )
 
-      val res2 = engine.query(new Clause(
+      val res2 = engine.query(new Horn(
         Atom("head", List[FFT](person1, person2)),
         Set(
-          ownership,
-          (ownership subst Map[Term,Term](
-            person1 -> person2
-          ).get).asInstanceOf[Atom[FFT]]
+          (ownership.asInstanceOf[Atom[Var]]),
+          (ownership mapSomeArg Dict[FFT](person1 -> person2).get)
         )
       ))
       .toSet

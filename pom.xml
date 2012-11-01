@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>cernoch.sss.sql</groupId>
   <artifactId>SqlStore</artifactId>
-  <version>0.4</version>
+  <version>0.5</version>
   <name>${project.artifactId}</name>
   <description>SQL-backed for storing ScaLogic clauses</description>
   <inceptionYear>2012</inceptionYear>
@@ -47,7 +47,7 @@
     <dependency>
       <groupId>cernoch.scalogic</groupId>
       <artifactId>ScaLogic</artifactId>
-      <version>0.4</version>
+      <version>0.5</version>
     </dependency>
     <dependency>
       <groupId>cernoch.scalistics</groupId>
