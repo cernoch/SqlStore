@@ -43,16 +43,6 @@ private[sm] object Namer {
     }.flatten.toMap
 
   /**
-   * Assigns a unique name to the each atom
-   */
-  def atoms
-  (prefix: String,
-   atoms: Iterable[Atom[_]])
-  = name(atoms) {
-    prefix + _.pred.toUpperCase
-  }
-
-  /**
    * Assigns a unique name to each variable
    */
   def vars

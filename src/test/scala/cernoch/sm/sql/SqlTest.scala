@@ -70,35 +70,14 @@ class SqlTest extends Specification {
     val all = List(BLC(cars), BLC(people), BLC(ownership))
   }
 
-  val derbySettings = new SqlSettings() {
-    driver = "derby:memory"
-    clName = "org.apache.derby.jdbc.EmbeddedDriver"
-
-    override def connUrl = super.connUrl + ";create=true"
-
-    override def apply()
-    = {
-      Class.forName(clName).newInstance()
-      DriverManager.getConnection(connUrl)
-    }
-
-    override def domainName
-    (d: Domain[_])
-    = d match {
-      case DecDom(_) => "DOUBLE PRECISION"
-      case NumDom(_,_) => "BIGINT"
-      case CatDom(_,_,_) => "VARCHAR(250)"
-    }
-
-  }
-
   "SQL storage" should {
     "import and query data" in {
       import Var._
       import Obj._
       import Sch._
 
-      val store = new SqlStorage(derbySettings, Sch.all)
+      val store = new SqlStorage(
+        new DerbyMemoryConnection() with LoggingInterceptor, Sch.all)
 
       val importer = store.reset
 

@@ -3,34 +3,33 @@ package cernoch.sm.sql
 import cernoch.scalogic._
 import cernoch.scalogic.storage._
 import exceptions.SchemaMismash
-import java.sql.{ResultSet, PreparedStatement}
-import collection.mutable.{HashMap, ArrayBuffer}
+import java.sql.{ResultSet}
+import collection.mutable.{ArrayBuffer}
 
 
 class SqlStorage(
-    sett: SqlSettings,
+    con: SqlConnection,
     schema: List[BLC[Btom[Var]]])
   extends Transactioned[
     Queriable[Horn[Atom[FFT], Set[Atom[FFT]]], Val[_]],
     BLC[Atom[Val[_]]]] {
   storage =>
 
-  // Create a JDBC connection to the database
-  private val con = sett()
-
   // Assign each atom in the schema a table name
-  private val tables = Namer.atoms(sett.prefix, schema.map {
-    _.head
-  })
+  private val tables
+  = Namer.name(schema.map{_.head}){
+    s => con.nameTab(s.head.pred)
+  }
 
   // Assign each column in a table a name
-  private val cols = Namer.map2func(schema.map {
-    btom => btom.head -> Namer.vars(btom.head.args)
+  private val cols
+  = Namer.map2func(schema.map{
+    btom =>
+      btom.head ->
+        Namer.name(btom.head.args){
+          h => con.nameCol(h.dom.name)
+        }
   }.toMap)
-
-  private def i(str: String)
-  = if (str matches "[a-zA-Z]+")
-      str else "\"" + str + "\""
 
   /**
    * Open the ScalaMiner connection to a already-created table
@@ -42,11 +41,11 @@ class SqlStorage(
    */
   def reset = {
     schema.map { _.head } // For each table name
-      .map(tables).map { i } // Get SQL-escaped identifier
+      .map(tables) // Get SQL-escaped identifier
       .map { "DROP TABLE " + _ }
       .foreach { s =>
         try {
-          con.prepareStatement(s).execute
+          con.execute(s)
         } // DROPPING THE TABLE! BEWARE!!!
         catch {
           case _ =>
@@ -54,21 +53,12 @@ class SqlStorage(
       }
 
     schema.map { _.head }.map(btom => {
-      "CREATE TABLE " + i(tables(btom)) +
+      "CREATE TABLE " + tables(btom) +
         btom.variables.map(v => {
-          i(cols(btom)(v)) + " " + sett.domainName(v.dom)
+          cols(btom)(v) + " " + con.columnType(v.dom)
         }).mkString(" ( ", " , ", " )")
       })
-      .map {sql =>
-        try {
-          val st = con.prepareStatement(sql)
-          st.execute
-        } catch {
-          case x =>
-            println("Cannot create table using >>>" + sql + "<<<:\n" + x)
-            throw x
-        }
-      }
+      .foreach{con.execute}
 
     new SqlImporter
   }
@@ -76,12 +66,8 @@ class SqlStorage(
 
   class SqlImporter extends Importer {
 
-    if (sett.transactions) {
-      con.prepareCall("BEGIN TRANSACTION").execute()
-    }
-
-    var enabled = true
-    //if (!enabled) throw new Exception("Cannot start a session!")
+    var enabled = con.transactionBegin
+    if (!enabled) throw new Exception("Cannot start a session!")
 
     val throttle = new Throttler
 
@@ -103,43 +89,24 @@ class SqlStorage(
         "Importer not initialized! Check logs for errors.")
 
       // Find all atoms in the schema that match the imported clause.
-      val btom = schema.map {
-        _.head
-      }
+      val btom = schema.map{ _.head }
         .find(btom => {
-        btom.pred == cl.head.pred &&
-          btom.args.size == cl.head.args.size
-      })
+                 btom.pred == cl.head.pred &&
+            btom.args.size == cl.head.args.size
+        })
         .getOrElse {
-        throw new SchemaMismash(
-          "Atom not found in the schema: " + cl.head)
-      }
+          throw new SchemaMismash(
+            "Atom not found in the schema: " + cl.head)
+        }
 
       // Create a dummy query
-      val sql = con.prepareStatement(
-        "INSERT INTO " + i(tables(btom)) +
-          btom.args.map {
-            _ => "?"
-          }.mkString(" VALUES ( ", ", ", " )")
-      )
-
-      // Set the query's parameters according to the imported atom
-      cl.head.args.zip(Stream.from(1)).foreach {
-        case (arg, i) => {
-          arg match {
-            case Cat(null) => sql.setNull(i, java.sql.Types.VARCHAR)
-            case Num(null) => sql.setNull(i, java.sql.Types.INTEGER)
-            case Dec(null) => sql.setNull(i, java.sql.Types.DOUBLE)
-            case Cat(v) => sql.setString(i, v)
-            case Num(v) => sql.setInt(i, v.toInt)
-            case Dec(v) => sql.setBigDecimal(i, v.bigDecimal)
-            case x => throw new Exception("Unknown value: " + x)
-          }
-        }
-      }
+      val sql = "INSERT INTO " +
+        tables(btom) +
+        btom.args.map{ _ => "?" }
+          .mkString(" VALUES ( ", ", ", " )")
 
       // And execute!
-      sql.executeUpdate() match {
+      con.update(sql, cl.head.args) match {
         case 1 =>
         case _ => throw new Exception("Cannot add the clause: " + cl)
       }
@@ -147,29 +114,20 @@ class SqlStorage(
 
     def close: Connection = {
       enabled = false
-
-      if (sett.transactions) {
-        con.prepareCall("COMMIT").execute()
-      }
+      con.transactionBegin
 
       schema
-        .map {
-        _.head
-      }
+        .map{ _.head }
         .map(btom => {
-        btom.args.map(v => {
-          "CREATE INDEX " +
-            i(tables(btom) + "-" + cols(btom)(v)) + " ON " +
-            i(tables(btom)) + " (" +
-            i(cols(btom)(v)) + ")"
+          btom.args.map(v => {
+            "CREATE INDEX " +
+              con.nameIdx(tables(btom) + "-"
+                        + cols(btom)(v)) + " ON " +
+              tables(btom) + " (" +
+              cols(btom)(v) + ")"
+          })
+          .map(con.execute)
         })
-          .map {
-          con.prepareStatement
-        }
-          .foreach {
-          _.execute
-        }
-      })
 
       new Connection
     }
@@ -243,8 +201,7 @@ class SqlStorage(
        * Helper create column name from
        */
       def cNam(v: (Atom[FFT], Btom[Var], Var))
-      = i(atomName(v._1)) + "." +
-        i(cols(v._2)(v._3))
+      = atomName(v._1) + "." + cols(v._2)(v._3)
 
       /*
        * SELECT
@@ -267,9 +224,9 @@ class SqlStorage(
           val aVarName = headCols(aVar)
 
           SELECT +=
-            i(nameForA) + "." + i(bColName) +
+            nameForA + "." + bColName +
               ( if (aVarName == bColName)
-                "" else " AS " + i(aVarName) )
+                "" else " AS " + aVarName )
         }}
 
       /*
@@ -281,7 +238,7 @@ class SqlStorage(
           val nameForA = atomName(atom)
           
           if (relation == nameForA)
-            i(relation) else i(relation) + " AS " + i(nameForA)
+            relation else relation + " AS " + nameForA
         }
       }
 
@@ -313,52 +270,30 @@ class SqlStorage(
               case aVal: Val[_] => {
                 BINDS += aVal
                 WHERE +=
-                  i(atomName(atom)) + "." +
-                    i(cols(btom)(bVar)) + " = ?"
+                  atomName(atom) + "." +
+                  cols(btom)(bVar) + " = ?"
               }
               case _ =>
             }
         }
       })
 
-      val sqlStr =
+      val sql =
         SELECT.mkString("SELECT ", ", ",    "") +
           FROM.mkString(" FROM ",  ", ",    "") +
          WHERE.mkString(" WHERE ", " AND ", "")
 
-      val sql = con.prepareCall(sqlStr)
-
-      (BINDS zip Stream.from(1)) foreach {
-        case (v, i) =>
-          v match {
-            case Cat(null) => sql.setNull(i, java.sql.Types.VARCHAR)
-            case Num(null) => sql.setNull(i, java.sql.Types.INTEGER)
-            case Dec(null) => sql.setNull(i, java.sql.Types.DOUBLE)
-            case Cat(v)    => sql.setString(i, v)
-            case Num(v)    => sql.setInt(i, v.toInt)
-            case Dec(v)    => sql.setBigDecimal(i, v.bigDecimal)
-            case x => throw new Exception("Unknown value: " + x)
-          }
-      }
-
       // Result iterable
-      new ResultIterable[Map[Var, Val[_]]](sql, result => {
+      new ResultIterable[Map[Var, Val[_]]](sql, BINDS.toList, result => {
 
         q.head.args.foldLeft(
           Map[Var,Val[_]]()
         ){ (map,term) => term match {
 
           // Map each variable
-          case hVar:Var => {
-            // Name of the headVar's column
-            val col = headCols(hVar)
-            // Get the result by the headVar name
-            map + (hVar -> (hVar.dom match {
-              case d@DecDom(_) => new Dec(BigDecimal(result.getBigDecimal(col)), d)
-              case d@NumDom(_, _) => new Num(BigInt(result.getInt(col)), d)
-              case d@CatDom(_, _, _) => new Cat(result.getString(col), d)
-            }).asInstanceOf[Val[_]])
-          }
+          case hVar:Var =>
+            map + (hVar -> con.extractArgument(
+              result, headCols(hVar), hVar.dom ))
 
           // Ignore other values
           case _ => map
@@ -374,12 +309,12 @@ class SqlStorage(
    * translates into SQL and gets executed. This class helps to
    * convert the result of the query into the original type of `q(X)`.
    *
-   * @param statement Statement to execute
    * @param getNext Creates a new result from the query output
    * @tparam T Type of the result
    */
   class ResultIterable[T]
-    (statement: PreparedStatement,
+    (sql: String,
+     values: List[Val[_]],
      getNext: ResultSet => T)
     extends Iterable[T] {
 
@@ -387,7 +322,7 @@ class SqlStorage(
       /**
        * Execute the query every time we iterate over the results
        */
-      val result = statement.executeQuery()
+      val result = con.query(sql, values)
 
       /**
        * Availability of the next result
