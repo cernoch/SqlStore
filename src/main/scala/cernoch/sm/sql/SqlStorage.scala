@@ -36,6 +36,8 @@ class SqlStorage(
    */
   def open = new Connection
 
+  var useTransaction = true
+
   /**
    * Removes all tables from the database and recreates its structure
    */
@@ -66,7 +68,7 @@ class SqlStorage(
 
   class SqlImporter extends Importer {
 
-    var enabled = con.transactionBegin
+    var enabled = useTransaction || con.transactionBegin
     if (!enabled) throw new Exception("Cannot start a session!")
 
     val throttle = new Throttler
@@ -114,7 +116,8 @@ class SqlStorage(
 
     def close: Connection = {
       enabled = false
-      con.transactionBegin
+      if (!useTransaction)
+        con.transactionCommit
 
       schema
         .map{ _.head }
