@@ -17,18 +17,12 @@ class SqlStorage(
 
   // Assign each atom in the schema a table name
   private val tables
-  = Namer.name(schema.map{_.head}){
-    s => con.nameTab(s.head.pred)
-  }
+  = Namer.name(schema.map{_.head}){_.head.pred}.mapValues{con.nameTab}
 
   // Assign each column in a table a name
   private val cols
-  = Namer.map2func(schema.map{
-    btom =>
-      btom.head ->
-        Namer.name(btom.head.args){
-          h => con.nameCol(h.dom.name)
-        }
+  = Namer.map2func(schema.map{ btom =>
+    btom.head -> Namer.name(btom.head.args){_.dom.name}.mapValues{con.nameCol}
   }.toMap)
 
   /**

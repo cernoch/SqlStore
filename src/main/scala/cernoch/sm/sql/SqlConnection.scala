@@ -70,6 +70,10 @@ abstract class SqlConnection {
   = if (str matches "[a-zA-Z][a-zA-Z0-9]*")
     str else "\"" + str.replaceAll("\"", "\\\"") + "\""
 
+  def quote(str: String)
+  = if (str matches "[a-zA-Z][a-zA-Z0-9]*")
+    str else "`" + str.replaceAll("`", "``") + "`"
+
 
 
   def columnType
@@ -77,7 +81,8 @@ abstract class SqlConnection {
   = d match {
     case DecDom(_) => "DOUBLE PRECISION"
     case NumDom(_,_) => "NUMERIC"
-    case CatDom(_,_,_) => "TEXT"
+    case CatDom(_,true,_) => "VARCHAR(250)"
+    case CatDom(_,false,_) => "TEXT"
   }
 }
 
@@ -125,10 +130,16 @@ class MysqlConnection(
   extends SqlConnection
   with PhysicalConncetionCache {
 
-  override def nameTab(s: String) = ident(pfix + s.toUpperCase)
+  override def nameTab(s: String)
+  = quote(pfix + s.toUpperCase)
+
+  override def nameCol(s: String)
+  = quote(pfix + s.toUpperCase)
 
   override def nameIdx(s: String)
-  = s.toLowerCase.replaceAll("-","_")
+  = s.toLowerCase
+    .replaceAll("[^a-zA-Z0-9]","")
+    .replaceAll("-","_")
 
   def initConnection = DriverManager.getConnection(
     "jdbc:mysql://" + host + ":" + port + "/" + dtbs +
@@ -137,6 +148,14 @@ class MysqlConnection(
         "connectionCollation=utf8_general_ci"
       ).mkString("?", "&amp;", ""),
     user, pass)
+
+  override def columnType
+    (d: Domain[_])
+  = d match {
+    case DecDom(_) => "DOUBLE PRECISION"
+    case NumDom(_,_) => "NUMERIC"
+    case CatDom(_,_,_) => "VARCHAR(250)"
+  }
 }
 
 
@@ -177,11 +196,12 @@ trait LoggingInterceptor extends SqlConnection {
     (statement: String,
      arguments: List[Val[_]] = List())
   = {
-    handle(
-      arguments
-        .map{_.get.toString.replaceAll("'", "\\'")}
-        .map{"'" + _ + "'"}
-        .foldLeft(statement){_.replaceFirst("\\?", _)}
+    handle(arguments.map{x =>
+        if (x.get == null) "NULL"
+        else x.get.toString.replaceAll("'", "\\'")
+      }
+      .map{"'" + _ + "'"}
+      .foldLeft(statement){_.replaceFirst("\\?", _)}
     )
     super.prepare(statement, arguments)
   }
