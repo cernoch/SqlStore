@@ -77,7 +77,7 @@ class SqlTest extends Specification {
       import Sch._
 
       val store = new SqlStorage(
-        new DerbyMemoryConnection() with LoggingInterceptor, Sch.all)
+        new DerbyInMemory() with LoggingInterceptor, Sch.all)
 
       val importer = store.reset
 

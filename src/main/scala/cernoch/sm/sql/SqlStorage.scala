@@ -8,40 +8,73 @@ import collection.mutable.{ArrayBuffer}
 
 
 class SqlStorage(
-    con: SqlConnection,
+    ada: JDBCAdaptor,
     schema: List[BLC[Btom[Var]]])
   extends Transactioned[
     Queriable[Horn[Atom[FFT], Set[Atom[FFT]]], Val[_]],
     BLC[Atom[Val[_]]]] {
   storage =>
 
-  // Assign each atom in the schema a table name
-  private val tables
-  = Namer.name(schema.map{_.head}){_.head.pred}.mapValues{con.nameTab}
+  /**
+   * Assign each atom in the schema a unique table name
+   */
+  private val tableNamer
+  = Namer.name(schema.map{_.head}){_.head.pred}
 
-  // Assign each column in a table a name
-  private val cols
-  = Namer.map2func(schema.map{ btom =>
-    btom.head -> Namer.name(btom.head.args){_.dom.name}.mapValues{con.nameCol}
-  }.toMap)
+
+  /**
+   * Assign each column in a table a name
+   */
+  private val columnNamer
+  = schema.map{ btom =>
+    btom.head -> Namer.name(btom.head.args){_.dom.name}
+  }.toMap
+
+  /**
+   * Escaped table name to be used directly in SQL
+   */
+  protected def nameTable
+    (btom: Btom[Var])
+  = ada.escTab(tableNamer(btom))
+
+  /**
+   * Escaped column name to be used directly in SQL
+   */
+  protected def nameColumn
+    (btom: Btom[Var])
+    (bvar: Var)
+  = ada.escapeColumn(
+    columnNamer(btom)(bvar)
+  )
+
+  /**
+   * Escaped index name to be used directly in SQL
+   */
+  protected def nameIndex
+    (btom: Btom[Var])
+    (bvar: Var)
+  = ada.escapeIndex(
+    tableNamer(btom) + "_" +
+    columnNamer(btom)(bvar)
+  )
+
+
 
   /**
    * Open the ScalaMiner connection to a already-created table
    */
   def open = new Connection
 
-  var useTransaction = true
-
   /**
    * Removes all tables from the database and recreates its structure
    */
   def reset = {
     schema.map { _.head } // For each table name
-      .map(tables) // Get SQL-escaped identifier
+      .map(nameTable) // Get SQL-escaped identifier
       .map { "DROP TABLE " + _ }
       .foreach { s =>
         try {
-          con.execute(s)
+          ada.execute(s)
         } // DROPPING THE TABLE! BEWARE!!!
         catch {
           case _ =>
@@ -49,12 +82,13 @@ class SqlStorage(
       }
 
     schema.map { _.head }.map(btom => {
-      "CREATE TABLE " + tables(btom) +
+      "CREATE TABLE " +
+        nameTable(btom) +
         btom.variables.map(v => {
-          cols(btom)(v) + " " + con.columnType(v.dom)
+          nameColumn(btom)(v) + " " + ada.columnDefinition(v.dom)
         }).mkString(" ( ", " , ", " )")
       })
-      .foreach{con.execute}
+      .foreach{ada.execute}
 
     new SqlImporter
   }
@@ -62,8 +96,7 @@ class SqlStorage(
 
   class SqlImporter extends Importer {
 
-    var enabled = useTransaction || con.transactionBegin
-    if (!enabled) throw new Exception("Cannot start a session!")
+    var enabled = true
 
     val throttle = new Throttler
 
@@ -95,33 +128,33 @@ class SqlStorage(
 
       // Create a dummy query
       val sql = "INSERT INTO " +
-        tables(btom) +
+        nameTable(btom) +
         btom.args.map{ _ => "?" }
           .mkString(" VALUES ( ", ", ", " )")
 
       // And execute!
-      con.update(sql, cl.head.args) match {
+      ada.update(sql, cl.head.args) match {
         case 1 =>
         case _ => throw new Exception("Cannot add the clause: " + cl)
       }
     }
 
-    def close: Connection = {
+    def close
+    : Queriable[Horn[Atom[FFT],Set[Atom[FFT]]], Val[_]]
+    = {
       enabled = false
-      if (!useTransaction)
-        con.transactionCommit
 
       schema
         .map{ _.head }
         .map(btom => {
           btom.args.map(v => {
             "CREATE INDEX " +
-              con.nameIdx(tables(btom) + "-"
-                        + cols(btom)(v)) + " ON " +
-              tables(btom) + " (" +
-              cols(btom)(v) + ")"
+              ada.escapeIndex(nameTable(btom) + "_" +
+                         nameColumn(btom)(v)) + " ON " +
+              nameTable(btom) + " (" +
+              nameColumn(btom)(v) + ")"
           })
-          .map(con.execute)
+          .map(ada.execute)
         })
 
       new Connection
@@ -140,14 +173,13 @@ class SqlStorage(
       case _ => Nil
     }
 
-    def close = con.con.close()
+    def close = ada.close
 
     def query
       (q: Horn[Atom[FFT], Set[Atom[FFT]]])
+    : Iterable[Map[Var, Val[_]]]
     = {
 
-      //println(q.head + " :- " + q.body.mkString(", ") + ".")
-      
       /**
        * Assign a unique name to each atom in the query's body.
        *
@@ -159,7 +191,7 @@ class SqlStorage(
        */
       val atomName = Namer.name(q.bodyAtoms) {
         atom =>
-          tables(schema.find {
+          nameTable(schema.find {
             _.head.pred == atom.pred
           }.get.head)
       }
@@ -197,7 +229,7 @@ class SqlStorage(
        * Helper create column name from
        */
       def cNam(v: (Atom[FFT], Btom[Var], Var))
-      = atomName(v._1) + "." + cols(v._2)(v._3)
+      = atomName(v._1) + "." + nameColumn(v._2)(v._3)
 
       /*
        * SELECT
@@ -215,7 +247,7 @@ class SqlStorage(
           val (atom, btom, bVar) = occs.head
         
           val nameForA = atomName(atom)
-          val bColName = cols(btom)(bVar)
+          val bColName = nameColumn(btom)(bVar)
         
           val aVarName = headCols(aVar)
 
@@ -230,7 +262,7 @@ class SqlStorage(
        */
       val FROM = q.bodyAtoms.map {
         atom => {
-          val relation = tables(atomBtom(atom))
+          val relation = nameTable(atomBtom(atom))
           val nameForA = atomName(atom)
           
           if (relation == nameForA)
@@ -267,7 +299,7 @@ class SqlStorage(
                 BINDS += aVal
                 WHERE +=
                   atomName(atom) + "." +
-                  cols(btom)(bVar) + " = ?"
+                  nameColumn(btom)(bVar) + " = ?"
               }
               case _ =>
             }
@@ -288,7 +320,7 @@ class SqlStorage(
 
           // Map each variable
           case hVar:Var =>
-            map + (hVar -> con.extractArgument(
+            map + (hVar -> ada.extractArgument(
               result, headCols(hVar), hVar.dom ))
 
           // Ignore other values
@@ -315,10 +347,11 @@ class SqlStorage(
     extends Iterable[T] {
 
     def iterator = new Iterator[T] {
+
       /**
        * Execute the query every time we iterate over the results
        */
-      val result = con.query(sql, values)
+      val result = ada.query(sql, values)
 
       /**
        * Availability of the next result

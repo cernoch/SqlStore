@@ -4,27 +4,32 @@ import java.sql._
 import cernoch.scalogic._
 
 
-abstract class SqlConnection {
+abstract class JDBCAdaptor {
 
-  def con: Connection
+  def close = con.close
 
-  def update(statement: String): Int = update(statement, List())
-  def update(statement: String, arguments: List[Val[_]]): Int
+  /**
+   * JDBC connection
+   */
+  protected def con: Connection
+
+  def update(sql: String): Int = update(sql, List())
+  def update(sql: String, arguments: List[Val[_]]): Int
   = {
-    val statement = prepare(statement, arguments)
+    val statement = prepare(sql, arguments)
     val result = statement.executeUpdate()
     statement.close()
     result
   }
 
-  def query(statement: String): ResultSet = query(statement, List())
-  def query(statement: String, arguments: List[Val[_]]): ResultSet
-  = prepare(statement, arguments).executeQuery()
+  def query(sql: String): ResultSet = query(sql, List())
+  def query(sql: String, arguments: List[Val[_]]): ResultSet
+  = prepare(sql, arguments).executeQuery()
   
-  def execute(statement: String): Boolean = execute(statement, List())
-  def execute(statement: String, arguments: List[Val[_]]): Boolean
+  def execute(sql: String): Boolean = execute(sql, List())
+  def execute(sql: String, arguments: List[Val[_]]): Boolean
   = {
-    val statement = prepare(statement, arguments)
+    val statement = prepare(sql, arguments)
     val result = statement.execute()
     statement.close()
     result
@@ -33,6 +38,7 @@ abstract class SqlConnection {
   protected def prepare
     (statement: String,
      arguments: List[Val[_]] = List())
+  : PreparedStatement
   = {
     val sql = con.prepareStatement(statement)
 
@@ -67,26 +73,21 @@ abstract class SqlConnection {
     case _ => throw new Exception("Internal error.")
   }
 
-  def transactionBegin = execute("BEGIN")
-  def transactionCommit = execute("COMMIT")
+  def escTab(s: String) = ident(s.toUpperCase)
+  def escapeColumn(s: String) = ident(s.toUpperCase)
+  def escapeIndex(s: String) = ident(s.toUpperCase)
 
-
-
-  def nameTab(s: String) = ident(s.toUpperCase)
-  def nameCol(s: String) = ident(s.toUpperCase)
-  def nameIdx(s: String) = ident(s.toUpperCase)
-
-  def ident(str: String)
+  protected def ident(str: String)
   = if (str matches "[a-zA-Z][a-zA-Z0-9]*")
     str else "\"" + str.replaceAll("\"", "\\\"") + "\""
 
-  def quote(str: String)
+  protected def quote(str: String)
   = if (str matches "[a-zA-Z][a-zA-Z0-9]*")
     str else "`" + str.replaceAll("`", "``") + "`"
 
 
 
-  def columnType
+  def columnDefinition
     (d: Domain[_])
   = d match {
     case DecDom(_) => "DOUBLE PRECISION"
@@ -97,12 +98,18 @@ abstract class SqlConnection {
 }
 
 
-trait PhysicalConncetionCache {
+trait ConncetionCache {
   
   protected def initConnection: Connection
   
   protected var connection: Option[Connection] = None
-  
+
+  def resetConnection
+  = {
+    con.close()
+    connection = None
+  }
+
   def con
   = connection.getOrElse{
     connection = Some(initConnection)
@@ -111,48 +118,45 @@ trait PhysicalConncetionCache {
 }
 
 
-class PostgresConnection(
+class PostgresAdaptor(
     val host: String = "localhost",
     val port: Int = 5432,
     val user: String,
     val pass: String,
     val dtbs: String,
     val pfix: String = "" )
-  extends SqlConnection
-    with PhysicalConncetionCache {
+  extends JDBCAdaptor
+    with ConncetionCache {
 
   Class.forName("org.postgresql.Driver").newInstance()
 
-  override def nameTab(s: String) = ident(pfix + s.toUpperCase)
+  override def escTab(s: String) = ident(pfix + s.toUpperCase)
 
   def initConnection = DriverManager.getConnection(
     "jdbc:postgresql://" + host + ":" + port + "/" + dtbs, user, pass)
 }
 
 
-class MysqlConnection(
+class MySQLAdaptor(
     val host: String = "localhost",
     val port: Int = 3306,
     val user: String,
     val pass: String,
     val dtbs: String,
     val pfix: String = "" )
-  extends SqlConnection
-  with PhysicalConncetionCache {
+  extends JDBCAdaptor
+  with ConncetionCache {
 
-  override def nameTab(s: String)
+  override def escTab(s: String)
   = quote(pfix + s.toUpperCase)
 
-  override def nameCol(s: String)
+  override def escapeColumn(s: String)
   = quote(pfix + s.toUpperCase)
 
-  override def nameIdx(s: String)
+  override def escapeIndex(s: String)
   = s.toLowerCase
     .replaceAll("[^a-zA-Z0-9]","")
     .replaceAll("-","_")
-
-  override def transactionBegin = true
-  override def transactionCommit = true
 
   def initConnection
   = DriverManager.getConnection(
@@ -164,21 +168,23 @@ class MysqlConnection(
     user, pass)
 
 
+  /**
+   * Number of [[cernoch.sm.sql.JDBCAdaptor.con]] calls
+   * with the current connection
+   */
   protected var resetter = 0
 
   override def con = {
-
     resetter = resetter + 1
     if (resetter > 20000) {
-      super.con.close()
-      connection = None
+      resetConnection
       resetter = 0
     }
     super.con
   }
 
 
-  override def columnType
+  override def columnDefinition
     (d: Domain[_])
   = d match {
     case DecDom(_) => "DOUBLE PRECISION"
@@ -194,7 +200,7 @@ class MysqlConnection(
 
 
 
-class DerbyMemoryConnection extends SqlConnection {
+class DerbyInMemory extends JDBCAdaptor {
 
   Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
   private val url = "jdbc:derby:memory:sm;create=true"
@@ -202,11 +208,7 @@ class DerbyMemoryConnection extends SqlConnection {
   override def con()
   = DriverManager.getConnection(url)
 
-  override def transactionBegin = true
-  override def transactionCommit = true
-
-
-  override def columnType
+  override def columnDefinition
     (d: Domain[_])
   = d match {
     case DecDom(_) => "DOUBLE PRECISION"
@@ -217,7 +219,7 @@ class DerbyMemoryConnection extends SqlConnection {
 
 
 
-trait LoggingInterceptor extends SqlConnection {
+trait LoggingInterceptor extends JDBCAdaptor {
 
   protected def handle(s: String) = println(s + ";")
 
