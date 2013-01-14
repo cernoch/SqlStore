@@ -85,15 +85,13 @@ class SqlStorage(
         "Importer not initialized! Check logs for errors.")
 
       // Find all atoms in the schema that match the imported clause.
-      val btom = schema.map{ _.head }
-        .find(btom => {
-                 btom.pred == cl.head.pred &&
-            btom.args.size == cl.head.args.size
-        })
-        .getOrElse {
+      val btom = schema find(btom => {
+                 btom.head.pred == cl.head.pred &&
+            btom.head.args.size == cl.head.args.size
+        }) getOrElse {
           throw new SchemaMismash(
             "Atom not found in the schema: " + cl.head)
-        }
+        } head
 
       // Create a dummy query
       val sql = "INSERT INTO " +
@@ -142,6 +140,7 @@ class SqlStorage(
       case _ => Nil
     }
 
+    def close = con.con.close()
 
     def query
       (q: Horn[Atom[FFT], Set[Atom[FFT]]])

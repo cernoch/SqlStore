@@ -62,7 +62,7 @@
     <dependency>
       <groupId>mysql</groupId>
       <artifactId>mysql-connector-java</artifactId>
-      <version>5.1.21</version>
+      <version>5.1.22</version>
     </dependency>
     <!-- Test -->
     <dependency>
@@ -101,7 +101,7 @@
             </goals>
             <configuration>
               <args>
-				<arg>-unchecked</arg>
+                <arg>-unchecked</arg>
                 <arg>-deprecation</arg>
                 <arg>-make:transitive</arg>
                 <arg>-dependencyfile</arg>

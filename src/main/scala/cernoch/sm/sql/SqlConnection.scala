@@ -10,7 +10,12 @@ abstract class SqlConnection {
 
   def update(statement: String): Int = update(statement, List())
   def update(statement: String, arguments: List[Val[_]]): Int
-  = prepare(statement, arguments).executeUpdate()
+  = {
+    val statement = prepare(statement, arguments)
+    val result = statement.executeUpdate()
+    statement.close()
+    result
+  }
 
   def query(statement: String): ResultSet = query(statement, List())
   def query(statement: String, arguments: List[Val[_]]): ResultSet
@@ -18,7 +23,12 @@ abstract class SqlConnection {
   
   def execute(statement: String): Boolean = execute(statement, List())
   def execute(statement: String, arguments: List[Val[_]]): Boolean
-  = prepare(statement, arguments).execute()
+  = {
+    val statement = prepare(statement, arguments)
+    val result = statement.execute()
+    statement.close()
+    result
+  }
 
   protected def prepare
     (statement: String,
@@ -91,7 +101,7 @@ trait PhysicalConncetionCache {
   
   protected def initConnection: Connection
   
-  private var connection: Option[Connection] = None
+  protected var connection: Option[Connection] = None
   
   def con
   = connection.getOrElse{
@@ -141,13 +151,32 @@ class MysqlConnection(
     .replaceAll("[^a-zA-Z0-9]","")
     .replaceAll("-","_")
 
-  def initConnection = DriverManager.getConnection(
+  override def transactionBegin = true
+  override def transactionCommit = true
+
+  def initConnection
+  = DriverManager.getConnection(
     "jdbc:mysql://" + host + ":" + port + "/" + dtbs +
       List("useUnicode=yes",
         "characterEncoding=UTF-8",
         "connectionCollation=utf8_general_ci"
       ).mkString("?", "&amp;", ""),
     user, pass)
+
+
+  protected var resetter = 0
+
+  override def con = {
+
+    resetter = resetter + 1
+    if (resetter > 20000) {
+      super.con.close()
+      connection = None
+      resetter = 0
+    }
+    super.con
+  }
+
 
   override def columnType
     (d: Domain[_])
