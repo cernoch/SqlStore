@@ -5,6 +5,7 @@ import cernoch.scalogic.storage._
 import exceptions.SchemaMismash
 import java.sql.{ResultSet}
 import collection.mutable.{ArrayBuffer}
+import tools.StringUtils.mkStringIfNonEmpty
 
 
 class SqlStorage(
@@ -35,7 +36,7 @@ class SqlStorage(
    */
   protected def nameTable
     (btom: Btom[Var])
-  = ada.escTab(tableNamer(btom))
+  = ada.escapeTable(tableNamer(btom))
 
   /**
    * Escaped column name to be used directly in SQL
@@ -191,7 +192,7 @@ class SqlStorage(
        */
       val atomName = Namer.name(q.bodyAtoms) {
         atom =>
-          nameTable(schema.find {
+          tableNamer(schema.find {
             _.head.pred == atom.pred
           }.get.head)
       }
@@ -263,7 +264,7 @@ class SqlStorage(
       val FROM = q.bodyAtoms.map {
         atom => {
           val relation = nameTable(atomBtom(atom))
-          val nameForA = atomName(atom)
+          val nameForA = ada.escapeTable(atomName(atom))
           
           if (relation == nameForA)
             relation else relation + " AS " + nameForA
@@ -307,9 +308,9 @@ class SqlStorage(
       })
 
       val sql =
-        SELECT.mkString("SELECT ", ", ",    "") +
-          FROM.mkString(" FROM ",  ", ",    "") +
-         WHERE.mkString(" WHERE ", " AND ", "")
+        mkStringIfNonEmpty(SELECT)("SELECT ", ", ",    "") +
+        mkStringIfNonEmpty( FROM )(" FROM ",  ", ",    "") +
+        mkStringIfNonEmpty( WHERE)(" WHERE ", " AND ", "")
 
       // Result iterable
       new ResultIterable[Map[Var, Val[_]]](sql, BINDS.toList, result => {

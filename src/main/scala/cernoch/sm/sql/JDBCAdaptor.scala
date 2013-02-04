@@ -73,7 +73,7 @@ abstract class JDBCAdaptor {
     case _ => throw new Exception("Internal error.")
   }
 
-  def escTab(s: String) = ident(s.toUpperCase)
+  def escapeTable(s: String) = ident(s.toUpperCase)
   def escapeColumn(s: String) = ident(s.toUpperCase)
   def escapeIndex(s: String) = ident(s.toUpperCase)
 
@@ -130,7 +130,7 @@ class PostgresAdaptor(
 
   Class.forName("org.postgresql.Driver").newInstance()
 
-  override def escTab(s: String) = ident(pfix + s.toUpperCase)
+  override def escapeTable(s: String) = ident(pfix + s.toUpperCase)
 
   def initConnection = DriverManager.getConnection(
     "jdbc:postgresql://" + host + ":" + port + "/" + dtbs, user, pass)
@@ -147,11 +147,11 @@ class MySQLAdaptor(
   extends JDBCAdaptor
   with ConncetionCache {
 
-  override def escTab(s: String)
-  = quote(pfix + s.toUpperCase)
+  override def escapeTable(s: String)
+  = quote(pfix + s)
 
   override def escapeColumn(s: String)
-  = quote(pfix + s.toUpperCase)
+  = quote(pfix + s)
 
   override def escapeIndex(s: String)
   = s.toLowerCase
