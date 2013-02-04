@@ -3,8 +3,9 @@ package cernoch.sm.sql
 import cernoch.scalogic._
 import cernoch.scalogic.storage._
 import exceptions.SchemaMismash
-import java.sql.{ResultSet}
-import collection.mutable.{ArrayBuffer}
+import java.sql.ResultSet
+import collection.mutable.ArrayBuffer
+import numeric._
 import tools.StringUtils.mkStringIfNonEmpty
 
 
@@ -182,6 +183,25 @@ class SqlStorage(
     = {
 
       /**
+       * Atoms are split into
+       * a) standard atoms stored in an SQL-table (`tableAtoms`)
+       * b) special atoms such as comparisons (`spešlAtoms`)
+       */
+      val (storeAtoms, spešlAtoms) =
+        q.bodyAtoms.foldLeft(
+          (List[Atom[FFT]](), List[Atom[FFT]]())
+        )(
+          (atomTuple,atom) => {
+            val (tableA, spešlA) = atomTuple
+            atom match {
+              case a:LessThan[_] => (tableA, atom :: spešlA)
+              case b:LessOrEq[_] => (tableA, atom ::spešlA)
+              case _ => (atom :: tableA, spešlA)
+            }
+          }
+       )
+
+      /**
        * Assign a unique name to each atom in the query's body.
        *
        * Ideally, the atom's name equals to the name of its archetype.
@@ -190,7 +210,8 @@ class SqlStorage(
        * we simply use the '''Namer.name''' function, which
        * automatically ensures uniqueness.
        */
-      val atomName = Namer.name(q.bodyAtoms) {
+      val atomName
+      = Namer.name(storeAtoms) {
         atom =>
           tableNamer(schema.find {
             _.head.pred == atom.pred
@@ -200,7 +221,7 @@ class SqlStorage(
       /**
        * Maps each atom (query) to the btom (schema)
        */
-      val atomBtom = q.bodyAtoms.map {
+      val atomBtom = storeAtoms.map {
         atom =>
           atom -> schema.find {
             _.head.pred == atom.pred
@@ -210,21 +231,26 @@ class SqlStorage(
       /**
        * Occurances of each variable in the schema
        */
-      val avarsOcc = q.variables.toSet.map((v: Var) =>
-        v -> {
+      val avarsOcc
+      = storeAtoms
+        .map{_.variables}
+        .flatten.toSet
+        .map(
+          ( v:Var ) =>
+            v -> {
 
-          // Go over each body atom
-          q.bodyAtoms.toList.map(atom => {
-            val btom = atomBtom(atom)
+              // Go over each body atom
+              storeAtoms.toList.map(atom => {
+                val btom = atomBtom(atom)
 
-            // find variables in archetype
-            (atom.args zip btom.args)
-              .filter { _._1 == v } // ...corresponding to "v" and
-              .map { _._2 } // (forgetting the original variable)
-              .map { (atom, btom, _) } // ...emit the table and the variable
-          }).flatten
-        }
-      ).toMap
+                // find variables in archetype
+                (atom.args zip btom.args)
+                  .filter { _._1 == v } // ...corresponding to "v" and
+                  .map { _._2 } // (forgetting the original variable)
+                  .map { (atom, btom, _) } // ...emit the table and the variable
+              }).flatten
+            }
+        ).toMap
 
       /**
        * Helper create column name from
@@ -261,7 +287,7 @@ class SqlStorage(
       /*
        * FROM
        */
-      val FROM = q.bodyAtoms.map {
+      val FROM = storeAtoms.map {
         atom => {
           val relation = nameTable(atomBtom(atom))
           val nameForA = ada.escapeTable(atomName(atom))
@@ -289,7 +315,7 @@ class SqlStorage(
       val BINDS = ArrayBuffer[Val[_]]()
 
       // Represent value binding
-      q.bodyAtoms.foreach(atom => {
+      storeAtoms.foreach(atom => {
         val btom = atomBtom(atom)
 
         // and values in the atom
@@ -305,6 +331,40 @@ class SqlStorage(
               case _ =>
             }
         }
+      })
+
+      // Represent special atoms
+
+      def varName(v:Var)
+      = {
+        val (_, btom, bvar) = avarsOcc(v).head
+        nameColumn(btom)(bvar)
+      }
+
+      spešlAtoms.map(
+        atom => {
+          atom match {
+            case lt:LessThan[_] => (" < ",  atom.args(0), atom.args(1))
+            case le:LessOrEq[_] => (" <= ", atom.args(0), atom.args(1))
+          }
+        }
+      ).foreach( arg => {
+        val (op, x, y) = arg
+        var result = ""
+
+        def addTerm(t: FFT) = t match {
+          case v:Var => result = result + varName(v)
+          case v:Val[_] => {
+            result = result + "?"
+            BINDS += v
+          }  
+        }
+
+        addTerm(x)
+        result = result + op
+        addTerm(y)
+
+        WHERE += result
       })
 
       val sql =

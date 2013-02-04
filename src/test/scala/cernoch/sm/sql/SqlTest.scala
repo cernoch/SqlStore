@@ -4,7 +4,7 @@ import org.junit.runner.RunWith
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
 import cernoch.scalogic._
-import java.sql.DriverManager
+import numeric.LessThan
 
 @RunWith(classOf[JUnitRunner])
 class SqlTest extends Specification {
@@ -70,113 +70,171 @@ class SqlTest extends Specification {
     val all = List(BLC(cars), BLC(people), BLC(ownership))
   }
 
+  def fixtures(s: SqlStorage) = {
+    import Var._
+    import Obj._
+    import Sch._
+
+    val importer = s.reset
+
+    def input
+      (x: Atom[Val[_]])
+    = importer.put(BLC(x))
+
+    // Cars
+
+    input(cars.mapAllArgs(Map(
+      car1   -> redForTwo,
+      make1  -> smart,
+      color1 -> red,
+      doors1 -> twoDoors
+    )))
+
+    input(cars.mapAllArgs(Map(
+      car1   -> whiteForTwo,
+      make1  -> smart,
+      color1 -> white,
+      doors1 -> twoDoors
+    )))
+
+    input(cars.mapAllArgs(Map(
+      car1   -> skodaFabia,
+      make1  -> skoda,
+      color1 -> white,
+      doors1 -> fourDoors
+    )))
+
+    // People
+
+    input(people.mapAllArgs(Map(
+      person1 -> franta
+    )))
+
+    input(people.mapAllArgs(Map(
+      person1 -> pepa
+    )))
+
+    // Ownership
+
+    input(ownership.mapAllArgs(Map(
+      person1 -> pepa,
+      car1    -> redForTwo
+    )))
+
+    input(ownership.mapAllArgs(Map(
+      person1 -> pepa,
+      car1    -> whiteForTwo
+    )))
+
+    input(ownership.mapAllArgs(Map(
+      person1 -> franta,
+      car1    -> whiteForTwo
+    )))
+
+    input(ownership.mapAllArgs(Map(
+      person1 -> franta,
+      car1    -> skodaFabia
+    )))
+
+    importer.close
+  }
+
+
+
   "SQL storage" should {
-    "import and query data" in {
+
+    "import data without an exception" in {
+      val storage
+      = new SqlStorage(
+        new DerbyInMemory("test1"),
+        Sch.all)
+
+      fixtures(storage)
+
+      true
+    }
+
+    "execute simple query correctly" in {
       import Var._
       import Obj._
       import Sch._
 
-      val store = new SqlStorage(
-        new DerbyInMemory() with LoggingInterceptor, Sch.all)
+      val engine
+      = fixtures(
+        new SqlStorage(
+          new DerbyInMemory("test2"),
+          Sch.all) )
 
-      val importer = store.reset
-
-      def input
-        (x: Atom[Val[_]])
-      = importer.put(BLC(x))
-
-      // Cars
-
-      input(cars.mapAllArgs(Map(
-        car1   -> redForTwo,
-        make1  -> smart,
-        color1 -> red,
-        doors1 -> twoDoors
-      )))
-
-      input(cars.mapAllArgs(Map(
-        car1   -> whiteForTwo,
-        make1  -> smart,
-        color1 -> white,
-        doors1 -> twoDoors
-      )))
-
-      input(cars.mapAllArgs(Map(
-        car1   -> skodaFabia,
-        make1  -> skoda,
-        color1 -> white,
-        doors1 -> fourDoors
-      )))
-
-      // People
-
-      input(people.mapAllArgs(Map(
-        person1 -> franta
-      )))
-
-      input(people.mapAllArgs(Map(
-        person1 -> pepa
-      )))
-
-      // Ownership
-
-      input(ownership.mapAllArgs(Map(
-        person1 -> pepa,
-        car1    -> redForTwo
-      )))
-
-      input(ownership.mapAllArgs(Map(
-        person1 -> pepa,
-        car1    -> whiteForTwo
-      )))
-
-      input(ownership.mapAllArgs(Map(
-        person1 -> franta,
-        car1    -> whiteForTwo
-      )))
-
-      input(ownership.mapAllArgs(Map(
-        person1 -> franta,
-        car1    -> skodaFabia
-      )))
-
-      val engine = importer.close
-
-
-
-      val res1 = engine.query(new Horn(
+      val q = new Horn(
         Atom("head", List[FFT](person1, doors1)),
         Set(
           (people.asInstanceOf[Atom[Var]]),
           (ownership),
           (cars mapSomeArg Dict(color1 -> white).get)
         )
-      ))
-      .toSet
-      .map{
+      )
+
+      engine.query(q).toSet.map{
         (m: Var => Val[_]) => (m(person1),m(doors1))
       } must_== Set(
         (pepa,   twoDoors),
         (franta, twoDoors),
         (franta, fourDoors)
       )
+    }
 
-      val res2 = engine.query(new Horn(
+    "query same table twice" in {
+      import Var._
+      import Obj._
+      import Sch._
+
+      val engine
+      = fixtures(
+        new SqlStorage(
+          new DerbyInMemory("test3"),
+          Sch.all) )
+
+      val q = new Horn(
         Atom("head", List[FFT](person1, person2)),
         Set(
           (ownership.asInstanceOf[Atom[Var]]),
           (ownership mapSomeArg Dict[FFT](person1 -> person2).get)
         )
-      ))
-      .toSet
-      .map{(m:Var=>Val[_]) => (m(person1),m(person2)) }
-      .filter{ case(x,y) => x != y } must_==
-      Set(
-        (pepa, franta),
-        (franta, pepa)
       )
 
-      res1 and res2
+      engine.query(q).toSet
+        .map{(m:Var=>Val[_]) => (m(person1),m(person2)) }
+        .filter{ case(x,y) => x != y } must_==
+        Set(
+          (pepa, franta),
+          (franta, pepa)
+        )
+    }
+
+
+
+    "handle variable inequalities" in {
+      import Var._
+      import Obj._
+      import Sch._
+
+      val engine
+      = fixtures(
+        new SqlStorage(
+          new DerbyInMemory("test4"),
+          Sch.all) )
+
+      val q = new Horn(
+        Atom("head", List[FFT](car1)),
+        Set(
+          cars,
+          new LessThan(doors1, fourDoors)
+        )
+      )
+
+      engine.query(q).toSet
+        .map{(m:Var=>Val[_]) => m(car1)} must_==
+          Set(whiteForTwo, redForTwo)
     }
   }
 }

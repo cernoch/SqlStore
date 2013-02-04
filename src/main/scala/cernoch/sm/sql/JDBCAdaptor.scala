@@ -200,10 +200,10 @@ class MySQLAdaptor(
 
 
 
-class DerbyInMemory extends JDBCAdaptor {
+class DerbyInMemory(db: String) extends JDBCAdaptor {
 
   Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
-  private val url = "jdbc:derby:memory:sm;create=true"
+  private val url = "jdbc:derby:memory:"+db+";create=true"
 
   override def con()
   = DriverManager.getConnection(url)
