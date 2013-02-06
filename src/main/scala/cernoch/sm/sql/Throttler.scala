@@ -1,15 +1,19 @@
 package cernoch.sm.sql
 
+/**
+ * Method [[cernoch.sm.sql.Throttler.exec()]] can be executed at
+ * most [[cernoch.sm.sql.Throttler.limit]] times simultanously.
+ */
 class Throttler {
-  var available = Runtime.getRuntime.availableProcessors()
+  var limit = Runtime.getRuntime.availableProcessors()
 
   def acquire = synchronized {
-    while (available <= 0) wait()
-    available = available - 1
+    while (limit <= 0) wait()
+    limit = limit - 1
   }
 
   def release = synchronized {
-    available = available + 1
+    limit = limit + 1
     notify()
   }
 

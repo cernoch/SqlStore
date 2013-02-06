@@ -5,6 +5,7 @@ import jdbc.JDBCAdaptor
 
 /**
  * Prints every query to stdout
+ * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 trait QueryLogger extends JDBCAdaptor {
 
