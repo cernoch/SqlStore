@@ -25,18 +25,18 @@ package cernoch.sm.sql.exceptions;
 import cernoch.scalogic.exceptions.SemanticsError;
 
 /**
- * The provided schema is not OK
+ * Something wrong happeded in the underlying database
  *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-public class SchemaMismash extends SemanticsError {
+public class BackendError extends SemanticsError {
 
-    private static final long serialVersionUID = 753151452239874150L;
+    private static final long serialVersionUID = 753151452239872431L;
 
     /**
-     * Creates a plain instance of <code>SyntaxError</code>.
+     * Creates a plain instance of <code>BackendError</code>.
      */
-    public SchemaMismash() {
+    public BackendError() {
     }
 
 
@@ -45,7 +45,7 @@ public class SchemaMismash extends SemanticsError {
      *
      * @param message the detail message.
      */
-    public SchemaMismash(String message) {
+    public BackendError(String message) {
         super(message);
     }
 
@@ -55,7 +55,7 @@ public class SchemaMismash extends SemanticsError {
      *
      * @param cause the reason to throw the exception.
      */
-    public SchemaMismash(Throwable cause) {
+    public BackendError(Throwable cause) {
         super(cause);
     }
 
@@ -66,7 +66,7 @@ public class SchemaMismash extends SemanticsError {
      * @param message the detail message.
      * @param cause the reason to throw the exception.
      */
-    public SchemaMismash(String message, Throwable cause) {
+    public BackendError(String message, Throwable cause) {
         super(message, cause);
     }
 }

@@ -1,9 +1,20 @@
 package cernoch.sm.sql
 
-import cernoch.scalogic.{Var, Term, Atom}
+/**
+ * Various tools for the ScaLogic => SQL package
+ * @author Radomír Černoch (radomir.cernoch at gmail.com)
+ */
+private object Tools {
 
+  def neighbours
+  [T]
+  (l: List[T])
+  : List[(T, T)]
+  = l match {
+    case a :: b :: tail => (a, b) :: neighbours(b :: tail)
 
-private[sm] object Namer {
+    case _ => Nil
+  }
 
   /**
    * Gives each item a name
@@ -13,10 +24,10 @@ private[sm] object Namer {
    * @param clash Generates a unique key in case of a clash
    */
   def name
-    [T]
-    (items: Iterable[T])
-    (index: T => String = (x: T) => x.toString,
-     clash: ((String, Int) => String) = (_ + _))
+  [T]
+  (items: Iterable[T])
+  (index: T => String = (x: T) => x.toString,
+   clash: ((String, Int) => String) = (_ + _))
   =
     items.groupBy(index).map {
       case (key, vals) => vals.zipWithIndex.map {
@@ -26,13 +37,4 @@ private[sm] object Namer {
         })
       }
     }.flatten.toMap
-
-  /**
-   * Assigns a unique name to each variable
-   */
-  def vars
-  (vars: Iterable[Var])
-  = name(vars) {
-    _.dom.name.toUpperCase
-  }
 }

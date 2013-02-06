@@ -1,5 +1,6 @@
 package cernoch.sm.sql
 
+import jdbc.DerbyMemAdaptor
 import org.junit.runner.RunWith
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
@@ -67,19 +68,19 @@ class SqlTest extends Specification {
     val people = new Btom("man", List(person1), Set(), Set())
     val ownership = new Btom("owns", List(person1, car1), Set(), Set())
 
-    val all = List(BLC(cars), BLC(people), BLC(ownership))
+    val all = List(cars, people, ownership)
   }
 
-  def fixtures(s: SqlStorage) = {
+  private def fixtures(s: SqlStorage) = {
     import Var._
     import Obj._
     import Sch._
 
-    val importer = s.reset
+    val importer = s.reset()
 
-    def input
-      (x: Atom[Val[_]])
-    = importer.put(BLC(x))
+    def input(x: Atom[Val[_]]) {
+      importer.put(x)
+    }
 
     // Cars
 
@@ -136,7 +137,7 @@ class SqlTest extends Specification {
       car1    -> skodaFabia
     )))
 
-    importer.close
+    importer.done()
   }
 
 
@@ -146,7 +147,7 @@ class SqlTest extends Specification {
     "import data without an exception" in {
       val storage
       = new SqlStorage(
-        new DerbyInMemory("test1"),
+        new DerbyMemAdaptor("test1"),
         Sch.all)
 
       fixtures(storage)
@@ -162,11 +163,11 @@ class SqlTest extends Specification {
       val engine
       = fixtures(
         new SqlStorage(
-          new DerbyInMemory("test2"),
+          new DerbyMemAdaptor("test2"),
           Sch.all) )
 
       val q = new Horn(
-        Atom("head", List[FFT](person1, doors1)),
+        Atom("head", List(person1, doors1)),
         Set(
           (people.asInstanceOf[Atom[Var]]),
           (ownership),
@@ -188,14 +189,10 @@ class SqlTest extends Specification {
       import Obj._
       import Sch._
 
-      val engine
-      = fixtures(
-        new SqlStorage(
-          new DerbyInMemory("test3"),
-          Sch.all) )
+      val engine = fixtures(new SqlStorage(new DerbyMemAdaptor("test3"), Sch.all))
 
       val q = new Horn(
-        Atom("head", List[FFT](person1, person2)),
+        Atom("head", person1, person2),
         Set(
           (ownership.asInstanceOf[Atom[Var]]),
           (ownership mapSomeArg Dict[FFT](person1 -> person2).get)
@@ -218,18 +215,11 @@ class SqlTest extends Specification {
       import Obj._
       import Sch._
 
-      val engine
-      = fixtures(
-        new SqlStorage(
-          new DerbyInMemory("test4"),
-          Sch.all) )
+      val engine = fixtures(new SqlStorage(new DerbyMemAdaptor("test4"), Sch.all))
 
       val q = new Horn(
-        Atom("head", List[FFT](car1)),
-        Set(
-          cars,
-          new LessThan(doors1, fourDoors)
-        )
+        Atom("head", car1),
+        Set(cars, new LessThan(doors1, fourDoors))
       )
 
       engine.query(q).toSet
