@@ -22,14 +22,12 @@
 
 package cernoch.sm.sql.exceptions;
 
-import cernoch.scalogic.exceptions.SemanticsError;
-
 /**
  * Something wrong happeded in the underlying database
  *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-public class BackendError extends SemanticsError {
+public class BackendError extends RuntimeException {
 
     private static final long serialVersionUID = 753151452239872431L;
 

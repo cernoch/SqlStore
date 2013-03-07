@@ -1,6 +1,6 @@
 package cernoch.sm.sql
 
-import cernoch.scalogic.{Var, Btom, Term, Atom}
+import cernoch.scalogic._
 import exceptions.SchemaMismash
 
 /**
@@ -10,21 +10,27 @@ import exceptions.SchemaMismash
  * SQL schema is created. Whenever we need to import/query/...
  * an atom, we need to find its btom first.
  */
-private class Atom2Btom(schema: List[Btom[Var]])
-    extends (Atom[Term] => Btom[Var]) {
+private class Atom2Btom(schema: List[Mode])
+		extends (Atom => Mode) {
 
-  val _index = schema
-    .groupBy(btom => (btom.pred, btom.args.size))
-    .mapValues(_ match {
-    case List(singleValue) => singleValue
-    case errList => throw new SchemaMismash(
-      "Multiple Btoms have the same signature:" + errList )
-  })
+	private lazy val index = schema
+		.groupBy(Atom2Btom.sign)
+		.mapValues(_ match {
+			case List(singleValue) => singleValue
+			case errList => throw new SchemaMismash(
+				"Multiple Btoms have the same sign:" + errList )
+		})
 
-  def apply(a: Atom[Term]) : Btom[Var]
-  = try { _index(( a.pred, a.args.size )) }
-  catch {
-    case cause: NoSuchElementException
-    => throw new SchemaMismash("Atom was not found in the schema.", cause)
-  }
+	def apply(a: Atom) : Mode
+	= try {
+		index(( a.pred, a.args.size ))
+	} catch {
+	case cause: NoSuchElementException => throw new
+		SchemaMismash("Atom was not found in the schema.", cause)
+	}
+}
+
+private object Atom2Btom {
+  def sign(b: Atom) = (b.pred, b.args.size)
+	def sign(b: Mode) = (b.pred, b.args.size)
 }

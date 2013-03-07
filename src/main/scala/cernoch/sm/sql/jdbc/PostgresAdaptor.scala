@@ -13,14 +13,15 @@ class PostgresAdaptor(
                        val user: String,
                        val pass: String,
                        val dtbs: String,
-                       val pfix: String = "")
-  extends JDBCAdaptor
-  with ConnectionCache {
+											 val prefix: String)
+  extends JDBCAdaptor {
 
   Class.forName("org.postgresql.Driver").newInstance()
 
-  override def escapeTable(s: String) = ident(pfix + s.toUpperCase)
+  override def escapeTable(s: String) = ident(prefix + s)
+  override def escapeColumn(s: String) = ident(prefix + s)
+  override def escapeIndex(t: String, c: String) = ident(prefix + t + "_" + c)
 
-  def initConnection = DriverManager.getConnection(
+  def createCon = DriverManager.getConnection(
     "jdbc:postgresql://" + host + ":" + port + "/" + dtbs, user, pass)
 }

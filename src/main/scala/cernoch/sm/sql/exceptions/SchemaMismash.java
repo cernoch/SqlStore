@@ -22,14 +22,12 @@
 
 package cernoch.sm.sql.exceptions;
 
-import cernoch.scalogic.exceptions.SemanticsError;
-
 /**
  * The provided schema is not OK
  *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-public class SchemaMismash extends SemanticsError {
+public class SchemaMismash extends RuntimeException {
 
     private static final long serialVersionUID = 753151452239874150L;
 

@@ -5,21 +5,22 @@ import java.sql.Connection
 /**
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-protected[sm] trait ConnectionCache {
+trait ConnectionCache
+  extends JDBCAdaptor {
 
-  protected def initConnection: Connection
+  protected var cache: Option[Connection] = None
 
-  protected var connection: Option[Connection] = None
-
-  def resetConnection() {
-    con().close()
-    connection = None
+  override def withConnection[T](f: Connection => T)
+  = {
+    val connection = cache.getOrElse {
+      cache = Some(createCon)
+      cache.get
+    }
+    f(connection)
   }
 
-  def con() = {
-    connection.getOrElse {
-      connection = Some(initConnection)
-      connection.get
-    }
+  def close {
+    cache.foreach(_.close())
+    cache = None
   }
 }

@@ -1,7 +1,7 @@
 package cernoch.sm.sql.jdbc
 
+import cernoch.scalogic._
 import java.sql.DriverManager
-import cernoch.scalogic.{CatDom, NumDom, DecDom, Domain}
 
 /**
  * Creates an in-memory Derby database
@@ -12,14 +12,12 @@ class DerbyMemAdaptor(db: String) extends JDBCAdaptor {
   Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
   private val url = "jdbc:derby:memory:"+db+";create=true"
 
-  override def con()
-  = DriverManager.getConnection(url)
+  def createCon = DriverManager.getConnection(url)
 
-  override def columnDefinition
-    (d: Domain[_])
-  = d match {
-    case DecDom(_) => "DOUBLE PRECISION"
-    case NumDom(_,_) => "BIGINT"
-    case CatDom(_,_,_) => "VARCHAR(250)"
-  }
+	override def columnDefinition(d: Domain)
+	= d match {
+		case _:Fractional[_] => "DOUBLE PRECISION"
+		case _:Numeric[_] => "BIGINT"
+		case _ => "VARCHAR(250)"
+	}
 }

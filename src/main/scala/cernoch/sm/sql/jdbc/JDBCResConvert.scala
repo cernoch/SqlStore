@@ -14,8 +14,8 @@ import java.sql.ResultSet
  * @tparam T Type of the result
  */
 class JDBCResConvert[T]
-(execute: () => ResultSet)
-(convert: ResultSet => T)
+  (execute: () => ResultSet)
+  (convert: ResultSet => T)
   extends Iterable[T] {
 
   def iterator = new Iterator[T] {

@@ -1,7 +1,7 @@
 package cernoch.sm.sql.jdbc
 
 import java.sql.DriverManager
-import cernoch.scalogic.{CatDom, NumDom, DecDom, Domain}
+import cernoch.scalogic._
 
 /**
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
@@ -14,7 +14,7 @@ class MySQLAdaptor(
                     val dtbs: String,
                     val pfix: String = "" )
   extends JDBCAdaptor
-  with ConnectionCache {
+  with ResettingCache {
 
   override def escapeTable(s: String)
   = quote(pfix + s)
@@ -27,7 +27,7 @@ class MySQLAdaptor(
     .replaceAll("[^a-zA-Z0-9]","")
     .replaceAll("-","_")
 
-  def initConnection
+  def createCon
   = DriverManager.getConnection(
     "jdbc:mysql://" + host + ":" + port + "/" + dtbs +
       List("useUnicode=yes",
@@ -35,29 +35,4 @@ class MySQLAdaptor(
         "connectionCollation=utf8_general_ci"
       ).mkString("?", "&amp;", ""),
     user, pass)
-
-
-  /**
-   * Number of [[cernoch.sm.sql.JDBCAdaptor.con]] calls
-   * with the current connection
-   */
-  protected var resetter = 0
-
-  override def con = {
-    resetter = resetter + 1
-    if (resetter > 20000) {
-      resetConnection
-      resetter = 0
-    }
-    super.con
-  }
-
-
-  override def columnDefinition
-  (d: Domain[_])
-  = d match {
-    case DecDom(_) => "DOUBLE PRECISION"
-    case NumDom(_,_) => "NUMERIC"
-    case CatDom(_,_,_) => "VARCHAR(250)"
-  }
 }

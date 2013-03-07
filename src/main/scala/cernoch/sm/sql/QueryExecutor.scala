@@ -1,45 +1,46 @@
 package cernoch.sm.sql
 
-import jdbc.{JDBCAdaptor, JDBCResConvert}
-import cernoch.scalogic._
-import numeric.{LessOrEq, LessThan}
+import jdbc.JDBCAdaptor
 import cernoch.sm.sql.Tools._
 import cernoch.scalogic._
 import collection.mutable.ArrayBuffer
 import tools.StringUtils._
-import java.sql.ResultSet
+import scala.Predef._
 
 /**
  * Executes SQL queries and returns variable bindings
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class QueryExecutor private[sql]
-    (ada: JDBCAdaptor, schema: List[Btom[Var]])
+    (ada: JDBCAdaptor, schema: List[Mode])
     extends IsEnabled {
 
   private val atom2btom = new Atom2Btom(schema)
   private val names = new SchemaNames(ada, schema)
   import names._
 
-  def close() { tryClose(ada.close) }
+  def query
+  ( q: Horn[Set[Atom]],
+    callback: Map[Var,Val] => Unit )
+  = onlyIfEnabled {
 
-  def query(q: Horn[Atom[Var], Set[Atom[FFT]]]) : Iterable[Map[Var, Val[_]]] = onlyIfEnabled {
-
-    /**
+		/**
      * Atoms are split into
      * a) standard atoms stored in an SQL-table (`tableAtoms`)
      * b) special atoms such as comparisons (`spešlAtoms`)
      */
     val (storeAtoms, spešlAtoms) =
       q.bodyAtoms.foldLeft(
-        (List[Atom[FFT]](), List[Atom[FFT]]())
+        (List[Atom](), List[Atom]())
       )(
         (atomTuple,atom) => {
           val (tableA, spešlA) = atomTuple
-          atom match {
-            case a:LessThan[_] => (tableA, atom :: spešlA)
-            case b:LessOrEq[_] => (tableA, atom :: spešlA)
-            case _ => (atom :: tableA, spešlA)
+          atom.pred match {
+						case "<"  => (tableA, atom :: spešlA)
+						case ">"  => (tableA, atom :: spešlA)
+						case "<=" => (tableA, atom :: spešlA)
+						case ">=" => (tableA, atom :: spešlA)
+            case  _   => (atom :: tableA, spešlA)
           }
         }
       )
@@ -53,54 +54,60 @@ class QueryExecutor private[sql]
      * we simply use the [[cernoch.sm.sql.Tools.name]] function,
      * which automatically ensures uniqueness.
      */
-    val atomTable = name(storeAtoms) { atom => table(atom2btom(atom)) }
+    def crop(s: String) = s.substring(0, math.min(s.length, 5))
+    val _atomTable = name(storeAtoms) { atom => crop(_tables(atom2btom(atom))) }
+    val atomTable = (a:Atom) => ada.escapeTable(_atomTable(a))
+
+		def varValPairs(m:Mode,a:Atom)
+		= (m.args zip a.args).collect{case (a:Var,b) => (a,b)}
 
     /**
      * Occurances of each variable in the schema
      */
-    val avarsOcc = storeAtoms.view
-      .map{_.variables}.flatten.toSet
-      .map( (v:Var) => v -> {
-
-      // Go over each body atom
-      storeAtoms.toList.map(atom => {
-        val btom = atom2btom(atom)
-
-        // find variables in archetype
-        (atom.args zip btom.args)
-          .filter { _._1 == v } // ...corresponding to "v" and
-          .map { _._2 } // (forgetting the original variable)
-          .map { (atom, btom, _) } // ...emit the table and the variable
-      }).flatten
-    }
-    ).toMap
+    import Atom2Btom._
+    val avarsOccRaw = ( for (
+        atom <- storeAtoms;
+        aVar <- atom.vars;
+        btom = atom2btom(atom)
+        if sign(atom) == sign(btom);
+        (bVar, aArg) <- varValPairs(btom,atom)
+        if aVar == aArg) yield (aVar, (atom, btom, bVar))
+    )
+    val avarsOcc = avarsOccRaw
+      .groupBy(_ _1)
+      .mapValues{ _ map { _._2 } }
 
     /**
      * Helper create column name from
      */
-    def cNam(v: (Atom[FFT], Btom[Var], Var))
+    def cNam(v: (Atom, Mode, Var))
     = atomTable(v._1) + "." + col(v._2)(v._3)
 
     /*
     * SELECT
     */
     // Name variables in the head
-    val headCols = name (q.head.variables) {_.dom.name}
+    val headCols = name (q.head.vars) {_.dom.name}
 
+    // Represent special atoms
+    def varName(v:Var) = {
+      val (_, btom, bvar) = avarsOcc(v).head
+      col(btom)(bvar)
+    }
 
     // Create the select
     val SELECT = new ArrayBuffer[String]()
-    avarsOcc
-      .filterKeys(q.head.args.contains)
-      .map { case (aVar, btomMapping) => {
-      val (atom, btom, bVar) = btomMapping.head
+    avarsOccRaw.map{_._1}.distinct
+      .filter(q.head.args.contains).foreach(aVar => {
+        val (atom,_,_) = avarsOcc(aVar).head
+        val aVarName = headCols(aVar)
+        val bColName = varName(aVar)
 
-      val aVarName = headCols(aVar)
-      val bColName = col(btom)(bVar)
-
-      SELECT += atomTable(atom) + "." + bColName +
-        ( if (aVarName == bColName) "" else " AS " + aVarName )
-    }}
+        SELECT +=
+          (if (storeAtoms.size == 1) "" else atomTable(atom) + ".") +
+          bColName +
+          ( if (aVarName == bColName) "" else " AS " + aVarName )
+    })
 
     /*
     * FROM
@@ -122,37 +129,37 @@ class QueryExecutor private[sql]
       }}
     })
 
-    val BINDS = ArrayBuffer[Val[_]]()
+    val BINDS = ArrayBuffer[Val]()
 
     // Represent value binding
     storeAtoms.foreach(atom => {
       val btom = atom2btom(atom)
 
       // and values in the atom
-      (atom.args zip btom.args).foreach {
-        case (aVal:Val[_], bVar) => {
+			varValPairs(btom,atom).foreach {
+        case (bVar, aVal:Val) => {
           BINDS += aVal
           WHERE += atomTable(atom) + "." + col(btom)(bVar) + " = ?"
         }
-        case (_:Var, _) => // Safely ignore
+        case _ => // Safely ignore
       }
     })
 
-    // Represent special atoms
-    def varName(v:Var) = {
-      val (_, btom, bvar) = avarsOcc(v).head
-      col(btom)(bvar)
-    }
-
-    spešlAtoms.view.map(_ match {
-      case lt:LessThan[_] => (" < ",  lt.x, lt.y)
-      case le:LessOrEq[_] => (" <= ",  le.x, le.y)
+    spešlAtoms.view.map(atom => (atom.pred, atom.args.size) match {
+      case ("<",2)  => (" < ",  atom.args(0), atom.args(1))
+      case ("<=",2) => (" <= ", atom.args(0), atom.args(1))
+			case (">",2)  => (" > ",  atom.args(0), atom.args(1))
+			case (">=",2) => (" >= ", atom.args(0), atom.args(1))
     }).foreach { case (op, x, y) => {
       var result = ""
 
       def addTerm(t: Any) = t match {
-        case v:Var => result = result + varName(v)
-        case v:Val[_] => { result = result + "?"; BINDS += v }
+        case aVal:Val => { result = result + "?"; BINDS += aVal }
+        case aVar:Var => {
+          result = result + (if (storeAtoms.size == 1)
+              "" else atomTable(avarsOcc(aVar).head._1) + ".") +
+            varName(aVar)
+        }
       }
 
       addTerm(x)
@@ -162,21 +169,20 @@ class QueryExecutor private[sql]
       WHERE += result
     }}
 
-    val sql =
-      SELECT.mkString("SELECT ", ", ",    "") +
-        mkStringIfNonEmpty( FROM )(" FROM ",  ", ",    "") +
-        mkStringIfNonEmpty( WHERE)(" WHERE ", " AND ", "")
+		val sql =
+			("SELECT "|:: SELECT mk   ", " ) +
+			( " FROM "|::  FROM  join ", " ) +
+			(" WHERE "|:: WHERE  join " AND ")
 
-    /**  TODO: This code should be moved into [[cernoch.sm.sql.jdbc.JDBCAdaptor]] */
-    val execute = () => ada.query(sql, BINDS.toList)
-
-    /**  TODO: This code should be moved into [[cernoch.sm.sql.jdbc.JDBCAdaptor]] */
-    val convert = (result: ResultSet) =>
-      q.head.args.view.map{hVar =>
-        hVar -> ada.extractArgument(result, headCols(hVar), hVar.dom)
-      }.toMap
-
-    /**  TODO: This code should be moved into [[cernoch.sm.sql.jdbc.JDBCAdaptor]] */
-    new JDBCResConvert(execute)(convert)
+		ada.withConnection(con => {
+			ada.query(con, sql, BINDS.toList)(result => {
+				while (result.next()) callback(
+					q.head.vars.view.map(hVar => {
+						hVar -> ada.extractArgument(
+							result, headCols(hVar), hVar.dom)
+						}).toMap
+					)
+  		})
+		})
   }
 }
