@@ -52,7 +52,7 @@ class BugBasedTests extends Specification {
     val all = List(make, color, doors, age)
   }
 
-  val btom: Mode = Atom("car", Vars.all)
+  val btom = Atom("car", Vars.all)
 
   /** Carthesian product of lists */
   def carthesian

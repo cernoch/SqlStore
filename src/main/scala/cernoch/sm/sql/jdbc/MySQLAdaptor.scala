@@ -2,25 +2,24 @@ package cernoch.sm.sql.jdbc
 
 import java.sql.DriverManager
 import cernoch.scalogic._
+import cernoch.sm.sql.Tools
 
 /**
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class MySQLAdaptor(
-                    val host: String = "localhost",
-                    val port: Int = 3306,
-                    val user: String,
-                    val pass: String,
-                    val dtbs: String,
-                    val pfix: String = "" )
+	val host: String = "localhost",
+  val port: Int = 3306,
+  val user: String,
+  val pass: String,
+  val dtbs: String,
+	val pfix: String = "" )
   extends JDBCAdaptor
   with ResettingCache {
 
-  override def escapeTable(s: String)
-  = quote(pfix + s)
+  override def escapeTable(s: String) = Tools.grave(pfix + s)
 
-  override def escapeColumn(s: String)
-  = quote(pfix + s)
+  override def escapeColumn(s: String) = Tools.grave(pfix + s)
 
   override def escapeIndex(t: String, c: String)
   = super.escapeIndex(t,c).toLowerCase

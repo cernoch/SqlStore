@@ -9,12 +9,11 @@ import cernoch.scalogic._
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class DataImporter private[sql]
-    (ada: JDBCAdaptor, schema: List[Mode])
+    (ada: JDBCAdaptor, sch: List[Atom])
     extends IsEnabled {
 
-  private val atom2btom = new Atom2Btom(schema)
-  private val names = new SchemaNames(ada, schema)
-  import names._
+  private val som2aom = new ArchetypeIndex(sch)
+  private val aom2sql = new ArchetypeNames(ada,sch);import aom2sql._
 
   /**
    * Imports a single clause into the database
@@ -33,7 +32,7 @@ class DataImporter private[sql]
   def put(atom: Atom) { onlyIfEnabled {
 
     // Create a dummy query
-    val sql = "INSERT INTO " + table(atom2btom(atom)) +
+    val sql = "INSERT INTO " + aom2esc(som2aom(atom)) +
       atom.args.map{ _ => "?" }.mkString(" VALUES ( ", ", ", " )")
 
 		val valArgs = atom.args.map{_ match {
@@ -54,13 +53,13 @@ class DataImporter private[sql]
 
 	def done() = tryClose {
 		ada.withConnection(con => {
-			schema.foreach( btom => {
+			sch.foreach( btom => {
 				btom.vars.map(bVar =>
-						"CREATE INDEX " + idx(btom)(bVar) +
-						         " ON " + table(btom) +
-						           " (" + col(btom)(bVar) + ")"
+						"CREATE INDEX " + idx2esc(btom)(bVar) +
+						         " ON " + aom2esc(btom) +
+						           " (" + avr2esc(btom)(bVar) + ")"
 				).foreach(sql => ada.execute(con,sql)) })
 		})
-    new QueryExecutor(ada,schema)
+    new QueryExecutor(ada,sch)
   }
 }

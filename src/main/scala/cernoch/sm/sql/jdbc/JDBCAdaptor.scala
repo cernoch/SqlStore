@@ -2,14 +2,26 @@ package cernoch.sm.sql.jdbc
 
 import java.sql._
 import cernoch.scalogic._
+import cernoch.sm.sql.Tools
 
+/**
+ * Encapsulates a JDBC connection and defines the SQL dialect
+ */
 abstract class JDBCAdaptor {
 
-  /**
-   * JDBC connection
-   */
-  protected def createCon: Connection
+	/**
+	 * Create a new JDBC connection
+	 *
+	 * WARNING: The caller is responsible for closing the connection!
+	 */
+	protected def createCon: Connection
 
+	/**
+	 * Executes a handler, which takes an active connection
+	 *
+	 * @param handler Inside the handler, the connection is alive
+	 * @tparam T Result type of the handler
+	 */
 	def withConnection[T]
 	(handler: Connection => T)
 	= {
@@ -27,13 +39,13 @@ abstract class JDBCAdaptor {
 		val result = statement.executeUpdate()
 		statement.close()
 		result
-  }
+	}
 
 	def query
 	(con: Connection, sql: String,
 	 arg: List[Val] = List())
 	(handler: ResultSet => Unit)
-  = {
+	= {
 		val query = prepare(con, sql, arg).executeQuery()
 		try { handler(query) }
 		finally { query.close() }
@@ -55,14 +67,15 @@ abstract class JDBCAdaptor {
 	: PreparedStatement
 	= {
 		val statement = con.prepareStatement(sql)
-
 		for ((arg,pos) <- arg zip Stream.from(1))
-			setArgument(statement, pos, arg)
-
+			injectArgument(statement, pos, arg)
 		statement
   }
 
-	protected def setArgument
+	/**
+	 * Injects a [[cernoch.scalogic.Val]] into a SQL query.
+	 */
+	protected def injectArgument
 	(sql: PreparedStatement,
 	 pos: Int, arg: Val)
 	= arg match {
@@ -81,6 +94,9 @@ abstract class JDBCAdaptor {
 		case _ => throw new Exception("Unsupported value: " + arg)
   }
 
+	/**
+	 * Extracts [[cernoch.scalogic.Val]] from a SQL query result.
+	 */
   def extractArgument
   (result: ResultSet,
    column: String,
@@ -97,7 +113,7 @@ abstract class JDBCAdaptor {
 				domain.asInstanceOf[Domain with Integral[Long]])
 
 			case _:BigInt => Val(
-				BigInt(result.getLong(column)), // Can we do better?
+				BigInt(result.getLong(column)), // TODO: Can we do better?
 				domain.asInstanceOf[Domain with Integral[BigInt]])
 
 			case _ => throw new Exception("Unsupported domain type: " + domain)
@@ -122,29 +138,19 @@ abstract class JDBCAdaptor {
     case _ => Val(result.getString(column), domain)
   }
 
-  /**Given a raw table name, returns a string directly insertable into SQL comands */
-  def escapeTable(s: String) = ident(s.toUpperCase)
+  /** Converts a table name into SQL-insertable string */
+  def escapeTable(s: String) = Tools.quote(s)
 
-  /**Given a raw column name, returns a string directly insertable into SQL comands */
-  def escapeColumn(s: String) = ident(s.toUpperCase)
+	/** Converts a column name into SQL-insertable string */
+  def escapeColumn(s: String) = Tools.quote(s)
 
-  /**Given a raw table and column name, returns a string directly insertable into SQL comands */
-  def escapeIndex(t: String, c: String) = ident(t.toUpperCase + "_" + c.toUpperCase)
+	/** Converts a table and column name into SQL-insertable index name */
+  def escapeIndex(t: String, c: String) = Tools.quote(t + "_" + c)
 
-  protected def ident(str: String)
-  = str match {
-		case JDBCAdaptor.SimpleIdent() => str
-		case _ => "\"" + str.replaceAll("\"", "\\\"") + "\""
-	}
-
-  protected def quote(str: String)
-	= str match {
-		case JDBCAdaptor.SimpleIdent() => str
-		case _ => "`" + str.replaceAll("`", "``") + "`"
-	}
-
-  def columnDefinition(d: Domain)
-  = d match {
+	/**
+	 * Defines the name of SQL column in the schema based on the domain
+	 */
+  def columnDefinition(d: Domain) = d match {
     case _:Fractional[_] => "DOUBLE PRECISION"
     case _:Numeric[_] => "NUMERIC"
     case _ => "VARCHAR(250)"
@@ -152,5 +158,4 @@ abstract class JDBCAdaptor {
 }
 
 object JDBCAdaptor {
-	protected val SimpleIdent = "[a-zA-Z][a-zA-Z0-9]*".r
 }

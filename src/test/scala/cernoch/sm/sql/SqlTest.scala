@@ -64,9 +64,9 @@ class SqlTest extends Specification {
 
     import Var._
 
-    val cars: Mode = Atom("car", car1, make1, color1, doors1)
-    val people: Mode = Atom("man", person1)
-    val ownership: Mode = Atom("owns", person1, car1)
+    val cars = Atom("car", car1, make1, color1, doors1)
+    val people = Atom("man", person1)
+    val ownership = Atom("owns", person1, car1)
 
     val all = List(cars, people, ownership)
   }
@@ -224,7 +224,7 @@ class SqlTest extends Specification {
       val engine = fixtures(new SqlStorage(new DerbyMemAdaptor("test4"), Sch.all))
 
       val q = Horn( Atom("head", car1),
-        Set(cars.atom, Atom("<", doors1, fourDoors)) )
+        Set(cars, Atom("<", doors1, fourDoors)) )
 
       val out = collection.mutable.HashSet[Val]()
       engine.query( q, mapa => out.add(mapa(car1)) )
