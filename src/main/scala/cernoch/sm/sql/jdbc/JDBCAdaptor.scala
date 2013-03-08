@@ -54,12 +54,12 @@ abstract class JDBCAdaptor {
 	def execute
 	(con: Connection, sql: String,
 	 arguments: List[Val] = List()): Boolean
-  = {
-    val statement = prepare(con, sql, arguments)
-    val result = statement.execute()
-    statement.close()
-    result
-  }
+	= {
+		val statement = prepare(con, sql, arguments)
+		val result = statement.execute()
+		statement.close()
+		result
+	}
 
 	protected def prepare
 	(con: Connection,
@@ -70,7 +70,7 @@ abstract class JDBCAdaptor {
 		for ((arg,pos) <- arg zip Stream.from(1))
 			injectArgument(statement, pos, arg)
 		statement
-  }
+	}
 
 	/**
 	 * Injects a [[cernoch.scalogic.Val]] into a SQL query.
@@ -92,17 +92,17 @@ abstract class JDBCAdaptor {
 			sql.setInt(pos, cat.dom.toInt(cat.get.get))
 
 		case _ => throw new Exception("Unsupported value: " + arg)
-  }
+	}
 
 	/**
 	 * Extracts [[cernoch.scalogic.Val]] from a SQL query result.
 	 */
-  def extractArgument
-  (result: ResultSet,
-   column: String,
-   domain: Domain)
-  : Val
-  = domain match {
+	def extractArgument
+	(result: ResultSet,
+	 column: String,
+	 domain: Domain)
+	: Val
+	= domain match {
 		case int: Integral[_] => int.zero match  {
 			case _:Int => Val(
 				result.getInt(column),
@@ -135,27 +135,24 @@ abstract class JDBCAdaptor {
 			case _ => throw new Exception("Unsupported domain type: " + domain)
 		}
 
-    case _ => Val(result.getString(column), domain)
-  }
+		case _ => Val(result.getString(column), domain)
+	}
 
-  /** Converts a table name into SQL-insertable string */
-  def escapeTable(s: String) = Tools.quote(s)
+	/** Converts a table name into SQL-insertable string */
+	def escapeTable(s: String) = Tools.quote(s)
 
 	/** Converts a column name into SQL-insertable string */
-  def escapeColumn(s: String) = Tools.quote(s)
+	def escapeColumn(s: String) = Tools.quote(s)
 
 	/** Converts a table and column name into SQL-insertable index name */
-  def escapeIndex(t: String, c: String) = Tools.quote(t + "_" + c)
+	def escapeIndex(t: String, c: String) = Tools.quote(t + "_" + c)
 
 	/**
 	 * Defines the name of SQL column in the schema based on the domain
 	 */
-  def columnDefinition(d: Domain) = d match {
-    case _:Fractional[_] => "DOUBLE PRECISION"
-    case _:Numeric[_] => "NUMERIC"
-    case _ => "VARCHAR(250)"
-  }
-}
-
-object JDBCAdaptor {
+	def columnDefinition(d: Domain) = d match {
+		case _:Fractional[_] => "DOUBLE PRECISION"
+		case _:Numeric[_] => "NUMERIC"
+		case _ => "VARCHAR(250)"
+	}
 }

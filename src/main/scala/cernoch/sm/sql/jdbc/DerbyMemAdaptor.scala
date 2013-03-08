@@ -9,10 +9,10 @@ import java.sql.DriverManager
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class DerbyMemAdaptor(db: String) extends JDBCAdaptor {
-  Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
-  private val url = "jdbc:derby:memory:"+db+";create=true"
+	Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
+	private val url = "jdbc:derby:memory:"+db+";create=true"
 
-  def createCon = DriverManager.getConnection(url)
+	def createCon = DriverManager.getConnection(url)
 
 	override def columnDefinition(d: Domain)
 	= d match {
