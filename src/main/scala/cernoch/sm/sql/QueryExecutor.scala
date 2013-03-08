@@ -40,6 +40,10 @@ class QueryExecutor private[sql]
 						case ">"  => (tableA, atom :: spešlA)
 						case "<=" => (tableA, atom :: spešlA)
 						case ">=" => (tableA, atom :: spešlA)
+						case "<>" => (tableA, atom :: spešlA)
+						case "!=" => (tableA, atom :: spešlA)
+						case "IN" => (tableA, atom :: spešlA)
+						case "!IN"=> (tableA, atom :: spešlA)
             case  _   => (atom :: tableA, spešlA)
           }
         }
@@ -145,29 +149,53 @@ class QueryExecutor private[sql]
       }
     })
 
-    spešlAtoms.view.map(atom => (atom.pred, atom.args.size) match {
-      case ("<",2)  => (" < ",  atom.args(0), atom.args(1))
-      case ("<=",2) => (" <= ", atom.args(0), atom.args(1))
-			case (">",2)  => (" > ",  atom.args(0), atom.args(1))
-			case (">=",2) => (" >= ", atom.args(0), atom.args(1))
-    }).foreach { case (op, x, y) => {
-      var result = ""
+		def addTerm(t: Term, result: StringBuilder) = t match {
+			case aVal:Val => { result ++= "?"; BINDS += aVal }
+			case aVar:Var => {
+				val aName = storeAtoms.size match {
+					case 1 => ""
+					case _ => atomTable(avarsOcc(aVar).head._1) + "."
+				}
+				result ++= aName ++= varName(aVar)
+			}
+			case _ => throw new IllegalArgumentException(
+				"Can only handle values and variables" )
+		}
 
-      def addTerm(t: Any) = t match {
-        case aVal:Val => { result = result + "?"; BINDS += aVal }
-        case aVar:Var => {
-          result = result + (if (storeAtoms.size == 1)
-              "" else atomTable(avarsOcc(aVar).head._1) + ".") +
-            varName(aVar)
-        }
-      }
+		val binary = List("<","<=",">",">=","<>","!=","==")
+		spešlAtoms.view
+			.filter(atom => binary.contains(atom.pred))
+			.map( atom => (atom.pred, atom.args(0), atom.args(1)) )
+			.foreach { case (op, x, y) => {
+				var result = new StringBuilder()
+				addTerm(x, result)
+				result ++= " " ++= op ++= " "
+				addTerm(y, result)
+				WHERE += result.toString()
+			}}
 
-      addTerm(x)
-      result = result + op
-      addTerm(y)
+		spešlAtoms.view
+			.filter(_.pred == "IN")
+			.foreach(atom => {
+			var result = new StringBuilder()
+			addTerm(atom.args.head, result)
+			result ++= " IN ("
+			atom.args.tail.foreach(t => addTerm(t, result))
+			result ++= ")"
+			WHERE += result.toString()
+		})
 
-      WHERE += result
-    }}
+		spešlAtoms.view
+			.filter(_.pred == "!IN")
+			.foreach(atom => {
+			var result = new StringBuilder()
+			result ++= "NOT("
+			addTerm(atom.args.head, result)
+			result ++= " IN ("
+			atom.args.tail.foreach(t => addTerm(t, result))
+			result ++= "))"
+			WHERE += result.toString()
+		})
 
 		val sql =
 			("SELECT "|:: SELECT mk   ", " ) +
