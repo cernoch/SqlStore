@@ -10,13 +10,20 @@ trait ConnectionCache
 
 	protected var cache: Option[Connection] = None
 
-	override def withConnection[T](f: Connection => T)
+	override def withConnection[T]
+	(handler: Connection => T)
 	= {
 		val connection = cache.getOrElse {
 			cache = Some(createCon)
 			cache.get
 		}
-		f(connection)
+		try { handler(connection) }
+		catch { case e: Throwable => {
+			cache = None
+			try { connection.close() }
+			catch { case e: Throwable => {} }
+			throw e
+		}}
 	}
 
 	def close {
