@@ -67,6 +67,7 @@ abstract class JDBCAdaptor {
 	: PreparedStatement
 	= {
 		val statement = con.prepareStatement(sql)
+		statement.setFetchSize(100)
 		for ((arg,pos) <- arg zip Stream.from(1))
 			injectArgument(statement, pos, arg)
 		statement
