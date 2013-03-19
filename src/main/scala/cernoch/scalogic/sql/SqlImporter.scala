@@ -1,15 +1,15 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 import exceptions.BackendError
-import jdbc.JDBCAdaptor
 import cernoch.scalogic._
 
 /**
  * Imports data into the database
+ *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-class DataImporter private[sql]
-(ada: JDBCAdaptor, sch: List[Atom])
+class SqlImporter private[sql]
+(ada: Adaptor, sch: List[Atom])
 	extends IsEnabled {
 
 	private val som2aom = new ArchetypeIndex(sch)
@@ -19,8 +19,8 @@ class DataImporter private[sql]
 	 * Imports a single clause into the database
 	 *
 	 * This method is only callable between
-	 * [[cernoch.sm.sql.SqlStorage.reset]]
-	 * and [[cernoch.sm.sql.DataImporter]].
+	 * [[cernoch.scalogic.sql.SqlStorage.reset]]
+	 * and [[cernoch.scalogic.sql.SqlImporter]].
 	 * Calling this method inbetween will throw an error.
 	 *
 	 * Since the SQL databases work with relational calculus, no variables,
@@ -60,6 +60,6 @@ class DataImporter private[sql]
 						" (" + avr2esc(btom)(bVar) + ")"
 				).foreach(sql => ada.execute(con,sql)) })
 		})
-		new QueryExecutor(ada,sch)
+		new SqlExecutor(ada,sch)
 	}
 }

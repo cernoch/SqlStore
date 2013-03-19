@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package cernoch.sm.sql.exceptions;
+package cernoch.scalogic.sql.exceptions;
 
 /**
  * Something wrong happeded in the underlying database

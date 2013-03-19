@@ -1,4 +1,4 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 import cernoch.scalogic._
 import exceptions.SchemaMismash

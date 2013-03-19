@@ -1,8 +1,7 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
-import cernoch.sm.sql.Tools._
 import cernoch.scalogic._
-import jdbc.JDBCAdaptor
+import Tools._
 
 /**
  * Every archetype is given a name in the SQL world.
@@ -10,14 +9,14 @@ import jdbc.JDBCAdaptor
  * Ideally, the atom's name equals to the name of its archetype.
  * But in cases like "parent(X,Y) /\ parent(Y,Z)", we must
  * distinguish between the two "parent" relation. To do so,
- * we simply use the [[cernoch.sm.sql.Tools.name]] function,
+ * we simply use the [[cernoch.scalogic.sql.Tools.name]] function,
  * which automatically ensures uniqueness.
  *
  * @param ada Adaptor providing correct escape routines
  * @param sch SQL schema as a list of atoms
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-private class ArchetypeNames(ada: JDBCAdaptor, sch: List[Atom]) {
+private class ArchetypeNames(ada: Adaptor, sch: List[Atom]) {
 
 	/** Assign each atom in the sch a unique table name */
 	val aom2sql = name(sch){_.pred}

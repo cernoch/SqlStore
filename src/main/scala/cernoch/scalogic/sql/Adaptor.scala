@@ -1,13 +1,15 @@
-package cernoch.sm.sql.jdbc
+package cernoch.scalogic.sql
 
 import java.sql._
+import Types._
 import cernoch.scalogic._
-import cernoch.sm.sql.Tools
+import math.{BigInt, BigDecimal => BigDec}
+
 
 /**
  * Encapsulates a JDBC connection and defines the SQL dialect
  */
-abstract class JDBCAdaptor {
+abstract class Adaptor {
 
 	/**
 	 * Create a new JDBC connection
@@ -36,15 +38,14 @@ abstract class JDBCAdaptor {
 	 arg: List[Val] = List())
 	= {
 		val statement = prepare(con, sql, arg)
-		val result = statement.executeUpdate()
-		statement.close()
-		result
+		try { statement.executeUpdate() }
+		finally { statement.close() }
 	}
 
-	def query
+	def query[T]
 	(con: Connection, sql: String,
-	 arg: List[Val] = List())
-	(handler: ResultSet => Unit)
+	 arg: List[Val] = List(),
+	 handler: ResultSet => T)
 	= {
 		val query = prepare(con, sql, arg).executeQuery()
 		try { handler(query) }
@@ -56,9 +57,8 @@ abstract class JDBCAdaptor {
 	 arguments: List[Val] = List()): Boolean
 	= {
 		val statement = prepare(con, sql, arguments)
-		val result = statement.execute()
-		statement.close()
-		result
+		try { statement.execute() }
+		finally { statement.close() }
 	}
 
 	protected def prepare
@@ -67,7 +67,6 @@ abstract class JDBCAdaptor {
 	: PreparedStatement
 	= {
 		val statement = con.prepareStatement(sql)
-		statement.setFetchSize(100)
 		for ((arg,pos) <- arg zip Stream.from(1))
 			injectArgument(statement, pos, arg)
 		statement
@@ -80,19 +79,25 @@ abstract class JDBCAdaptor {
 	(sql: PreparedStatement,
 	 pos: Int, arg: Val)
 	= arg match {
-		case cat:Cat[_] => if (cat.value == null)
-			sql.setNull(pos, java.sql.Types.VARCHAR) else
-			sql.setString(pos, cat.value.toString())
+		case DecVal(v:BigDec,f) => if (v == null)
+			sql.setNull(pos, DECIMAL) else
+			sql.setBigDecimal(pos, v.bigDecimal)
 
-		case cat:Dec[_] => if (cat.value == null)
-			sql.setNull(pos, java.sql.Types.DOUBLE) else
-			sql.setDouble(pos, cat.dom.toDouble(cat.get.get))
+		case DecVal(v,f) => if (v == null)
+			sql.setNull(pos, DOUBLE) else
+			sql.setDouble(pos, f.toDouble(v))
 
-		case cat:Num[_] => if (cat.value == null)
-			sql.setNull(pos, java.sql.Types.INTEGER) else
-			sql.setInt(pos, cat.dom.toInt(cat.get.get))
+		case NumVal(v:BigInt,n) => if (v == null)
+			sql.setNull(pos, BIGINT) else
+			sql.setString(pos, v.bigInteger.toString)
 
-		case _ => throw new Exception("Unsupported value: " + arg)
+		case NumVal(v,n) => if (v == null)
+			sql.setNull(pos, INTEGER) else
+			sql.setLong(pos, n.toLong(v))
+
+		case StrVal(v,i) => if (v == null)
+			sql.setNull(pos, VARCHAR) else
+			sql.setString(pos, v)
 	}
 
 	/**
@@ -155,5 +160,98 @@ abstract class JDBCAdaptor {
 		case _:Fractional[_] => "DOUBLE PRECISION"
 		case _:Numeric[_] => "NUMERIC"
 		case _ => "VARCHAR(250)"
+	}
+}
+
+
+
+/**
+ * Keeps the connection in the cache
+ *
+ * If there is any exception when the connection is in use,
+ * the connection is closed and a new one is created on the
+ * next request.
+ *
+ * @author Radomír Černoch (radomir.cernoch at gmail.com)
+ */
+trait ConnectionCache
+	extends Adaptor {
+
+	protected var cache
+	: Option[Connection] = None
+
+	override def withConnection[T]
+	(handler: Connection => T)
+	= {
+		val connection = cache.getOrElse {
+			cache = Some(createCon)
+			cache.get
+		}
+		try   { handler(connection) }
+		catch { case e: Throwable => {
+			cache = None
+			try   { connection.close() }
+			catch { case e: Throwable => {} }
+			throw e
+		}}
+	}
+
+	def close {
+		cache.foreach(_.close())
+		cache = None
+	}
+}
+
+
+
+/**
+ * Adaptor that resets itself every N queries
+ *
+ */
+trait ResettingCache extends ConnectionCache {
+
+	/**
+	 * Number of [[Adaptor.withConnection]]
+	 * calls with the current connection
+	 */
+	protected var usageCounter = 0
+
+	protected var usageLimit = 1000
+
+	override def withConnection[T](f: Connection => T)
+	= {
+		usageCounter = usageCounter + 1
+		if (usageCounter > usageLimit) {
+			usageCounter = 0
+			close
+		}
+		super.withConnection(f)
+	}
+}
+
+
+
+/**
+ * Prints every query to stdout
+ * @author Radomír Černoch (radomir.cernoch at gmail.com)
+ */
+trait QueryLogger extends Adaptor {
+
+	protected def handle(s: String)
+	= println(s + ";")
+
+	override protected
+	def prepare
+	(con: Connection,
+	 sql: String,
+	 arg: List[Val])
+	= {
+		handle(
+			arg.view.map{v => v.value match {
+				case null => "NULL"
+				case args => "'" + v.value.toString.replaceAll("'", "\\'") + "'"
+			}}.foldLeft(sql){_.replaceFirst("\\?", _)}
+		)
+		super.prepare(con,sql,arg)
 	}
 }

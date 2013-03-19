@@ -1,38 +1,36 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
-import jdbc.JDBCAdaptor
-import cernoch.sm.sql.Tools._
 import cernoch.scalogic._
 import collection.mutable.{ListBuffer, ArrayBuffer}
 import tools.StringUtils._
-import collection.mutable
+import Tools._
 
 /**
  * Executes SQL queries and returns variable bindings
+ *
+ * Terminology:
+ *
+ * atom ... Any atom
+ * aom ... Archetype atoms (defines a SQL table)
+ * som ... Stored atom in query's body (saved in a SQL table)
+ * bom ... Built-in atom in query's body (not saved in a SQL table)
+ *
+ * avr ... Some variable inside aom
+ * svr ... Some variable inside som
+ * bvr ... Some variable inside bom
+ *
+ * ach ... Plural of aTom (mnemonic: ArCHetypes)
+ * sed ... Plural of sTom (mnemonic: StorED)
+ * bin ... Plural of bTom (mnemonic: Built-IN)
+ *
+ * sql ... Any identifier in the SQL schema
+ * esc ... Escaped identified in the SQL schema
+ *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-class QueryExecutor private[sql]
-(ada: JDBCAdaptor, sch: List[Atom])
+class SqlExecutor private[sql]
+	(ada: Adaptor, sch: List[Atom])
 	extends IsEnabled {
-
-	/* Terminology:
-	 *
-	 * atom ... Any atom
-	 * aom ... Archetype atoms (defines a SQL table)
-	 * som ... Stored atom in query's body (saved in a SQL table)
-	 * bom ... Built-in atom in query's body (not saved in a SQL table)
-	 *
-	 * avr ... Some variable inside aom
-	 * svr ... Some variable inside som
-	 * bvr ... Some variable inside bom
-	 *
-	 * ach ... Plural of aTom (mnemonic: ArCHetypes)
-	 * sed ... Plural of sTom (mnemonic: StorED)
-	 * bin ... Plural of bTom (mnemonic: Built-IN)
-	 *
-	 * sql ... Any identifier in the SQL schema
-	 * esc ... Escaped identified in the SQL schema
-	 */
 
 	/** Maps each som to its aom */
 	private val som2aom = new ArchetypeIndex(sch)
@@ -56,7 +54,7 @@ class QueryExecutor private[sql]
 		 * Ideally, the atom's name equals to the name of its archetype.
 		 * But in cases like "parent(X,Y) /\ parent(Y,Z)", we must
 		 * distinguish between the two "parent" relation. To do so,
-		 * we simply use the [[cernoch.sm.sql.Tools.name]] function,
+		 * we simply use the [[cernoch.scalogic.sql.Tools.name]] function,
 		 * which automatically ensures uniqueness.
 		 */
 		val som2sql = name(sed){som =>
@@ -169,13 +167,19 @@ class QueryExecutor private[sql]
 			(" WHERE "|:: WHERE  join " AND ")
 
 		ada.withConnection(con => {
-			ada.query(con, SQL, BINDS.toList)(result => {
-				while (result.next()) callback(
-					q.head.vars.view.map(hVar => {
-						hVar -> ada.extractArgument(
-							result, headCols(hVar), hVar.dom)
-					}).toMap
-				)
+			ada.query(con, SQL, BINDS.toList, result => {
+				while (result.next()) {
+
+					val headMap =
+						for (hVar <- q.head.vars)
+							yield {
+								val col = headCols(hVar)
+								val dom = hVar.dom
+								hVar -> ada.extractArgument(result, col, dom)
+							}
+
+					callback(headMap.toMap)
+				}
 			})
 		})
 	}

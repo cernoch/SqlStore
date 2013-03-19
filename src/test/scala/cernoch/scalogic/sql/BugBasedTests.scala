@@ -1,6 +1,5 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
-import jdbc.DerbyMemAdaptor
 import org.junit.runner.RunWith
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
@@ -10,10 +9,10 @@ import cernoch.scalogic._
 class BugBasedTests extends Specification {
 
   object Dom {
-    val make  = Domain.cat("make", Set("skoda", "smart"))
-    val color = Domain.cat("color", allowed = Set("red", "white"))
-    val door  = Domain.int("doors")
-    val age   = Domain.dec("age")
+    val make  = StrDom.Limited("make", Set("skoda", "smart"))
+    val color = StrDom.Limited("color", Set("red", "white"))
+    val door  = IntDom("doors")
+    val age   = DoubleDom("age")
 
     val all = List(make, color, door, age)
   }
@@ -21,23 +20,23 @@ class BugBasedTests extends Specification {
   object Obj {
     import Dom._
 
-    val skoda = new Cat("skoda", make)
-    val smart = new Cat("smart", make)
+    val skoda = Val("skoda", make)
+    val smart = Val("smart", make)
     val makes = List(skoda, smart)
 
-    val red   = new Cat("red", color)
-    val white = new Cat("white", color)
+    val red   = Val("red", color)
+    val white = Val("white", color)
     val colors = List(red, white)
 
-    val twoDoors  = new Num(2, door)
-    val fourDoors = new Num(4, door)
+    val twoDoors  = Val(2, door)
+    val fourDoors = Val(4, door)
     val doors = List(twoDoors, fourDoors)
 
-    val age1 = new Dec(1.0, age)
-    val age2 = new Dec(1.2, age)
-    val age3 = new Dec(2.0, age)
-    val age4 = new Dec(2.4, age)
-    val age5 = new Dec(3.0, age)
+    val age1 = Val(1.0, age)
+    val age2 = Val(1.2, age)
+    val age3 = Val(2.0, age)
+    val age4 = Val(2.4, age)
+    val age5 = Val(3.0, age)
     val ages = List(age1, age2, age3, age4, age5)
 
     val all = List(makes, colors, doors, ages)

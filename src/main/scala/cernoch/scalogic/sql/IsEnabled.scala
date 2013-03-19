@@ -1,4 +1,4 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 /**
  * Keeps track of the object's state
@@ -9,7 +9,7 @@ package cernoch.sm.sql
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 private[sql] trait IsEnabled {
-  protected var _enabled = true
+  private var _enabled = true
 
   def enabled = _enabled
 

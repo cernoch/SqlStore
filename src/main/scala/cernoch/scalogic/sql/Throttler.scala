@@ -1,8 +1,8 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 /**
- * Method [[cernoch.sm.sql.Throttler#exec()]] can be executed at
- * most [[cernoch.sm.sql.Throttler#limit]] times simultanously.
+ * Method [[cernoch.scalogic.sql.Throttler#exec()]] can be executed at
+ * most [[cernoch.scalogic.sql.Throttler#limit]] times simultaneously.
  */
 class Throttler {
   var limit = Runtime.getRuntime.availableProcessors()

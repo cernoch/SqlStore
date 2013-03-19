@@ -1,14 +1,13 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 import cernoch.scalogic._
-import jdbc.JDBCAdaptor
 
 /**
  * Connects ScaLogic to the SQL world.
  *
  * Allows data import and querying.
  */
-class SqlStorage(ada: JDBCAdaptor, sch: List[Atom])
+class SqlStorage(ada: Adaptor, sch: List[Atom])
 	extends IsEnabled { storage =>
 
 	private val names = new ArchetypeNames(ada, sch);import names._
@@ -16,7 +15,7 @@ class SqlStorage(ada: JDBCAdaptor, sch: List[Atom])
 	/**
 	 * Opens the connection to an already-created database
 	 */
-	def open = tryClose {new QueryExecutor(ada, sch)}
+	def open = tryClose {new SqlExecutor(ada, sch)}
 
 	/**
 	 * Removes all tables from the database and recreates its structure
@@ -40,6 +39,6 @@ class SqlStorage(ada: JDBCAdaptor, sch: List[Atom])
 			}).foreach{sql => ada.execute(con,sql)}
 		})
 
-		new DataImporter(ada, sch)
+		new SqlImporter(ada, sch)
 	}}
 }

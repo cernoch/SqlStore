@@ -1,4 +1,4 @@
-package cernoch.sm.sql
+package cernoch.scalogic.sql
 
 import cernoch.scalogic.Atom
 
@@ -42,30 +42,24 @@ object Tools {
 	/**
 	 * RegEx for identifiers that need no escaping
 	 */
-	val SimpleIdent = "[a-zA-Z][a-zA-Z0-9]*".r
+	val SimpleIdent = "[a-zA-Z][a-zA-Z0-9_]*".r
 
 	/**
 	 * Backslash-escapes a string if necessary
 	 */
-	def quote(s: String) = s match {
-		case SimpleIdent() => s
-		case _ => "\"" + s.replaceAll("\"", "\\\"") + "\""
-	}
+	def quote(s: String) = "\"" + s.replaceAll("\"", "\\\"") + "\""
 
 	/**
 	 * (Grave-accent)-escapes a string if necessary
 	 */
-	def grave(s: String) = s match {
-		case SimpleIdent() => s
-		case _ => "`" + s.replaceAll("`", "``") + "`"
-	}
+	def grave(s: String) = "`" + s.replaceAll("`", "``") + "`"
 
 	/**
 	 * Signature of an atom.
 	 *
 	 * The signature maps atoms to tables in the SQL schema.
 	 *
-	 * @see [[cernoch.sm.sql.ArchetypeIndex]]
+	 * @see [[cernoch.scalogic.sql.ArchetypeIndex]]
 	 */
 	def signature(b: Atom) = (b.pred, b.args.size)
 
