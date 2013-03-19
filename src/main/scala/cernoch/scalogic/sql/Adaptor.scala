@@ -4,6 +4,7 @@ import java.sql._
 import Types._
 import cernoch.scalogic._
 import math.{BigInt, BigDecimal => BigDec}
+import java.math.{BigInteger, BigDecimal}
 import grizzled.slf4j.Logging
 
 
@@ -93,31 +94,73 @@ abstract class Adaptor extends Logging {
 	}
 
 	/**
+	 * Converts a value befere passing to JDBC
+	 *
+	 * By default, this is an identity function. Override it
+	 * to implement a custom value mapper.
+	 */
+	protected def convIntoSQL[T]
+	(scalogicObject: T, domain: Domain)
+	= scalogicObject
+
+	/**
 	 * Injects a [[cernoch.scalogic.Val]] into a SQL query.
 	 */
 	protected def injectArgument
 	(sql: PreparedStatement,
-	 pos: Int, arg: Val)
-	= arg match {
-		case DecVal(v:BigDec,f) => if (v == null)
-			sql.setNull(pos, DECIMAL) else
-			sql.setBigDecimal(pos, v.bigDecimal)
+	 pos: Int, arg: Val) { arg match {
 
-		case DecVal(v,f) => if (v == null)
-			sql.setNull(pos, DOUBLE) else
-			sql.setDouble(pos, f.toDouble(v))
+		case DecVal(v:BigDec,f)
+		=> Option(convIntoSQL(v, arg.dom)) match {
+			case None       => sql.setNull(      pos, DECIMAL)
+			case Some(some) => sql.setBigDecimal(pos, some.bigDecimal)
+		}
 
-		case NumVal(v:BigInt,n) => if (v == null)
-			sql.setNull(pos, BIGINT) else
-			sql.setString(pos, v.bigInteger.toString)
+		case DecVal(v,f)
+		=> Option(convIntoSQL(f.toDouble(v), arg.dom)) match {
+			case None       => sql.setNull(  pos, DOUBLE)
+			case Some(some) => sql.setDouble(pos, some)
+		}
 
-		case NumVal(v,n) => if (v == null)
-			sql.setNull(pos, INTEGER) else
-			sql.setLong(pos, n.toLong(v))
+		case NumVal(v:BigInt,n)
+		=> Option(convIntoSQL(v, arg.dom)) match {
+			case None       => sql.setNull(  pos, BIGINT)
+			case Some(some) => sql.setString(pos, some.bigInteger.toString)
+		}
 
-		case StrVal(v,i) => if (v == null)
-			sql.setNull(pos, VARCHAR) else
-			sql.setString(pos, v)
+		case NumVal(v,n)
+		=> Option(convIntoSQL(n.toLong(v), arg.dom)) match {
+			case None       => sql.setNull(pos, INTEGER)
+			case Some(some) => sql.setLong(pos, some)
+		}
+
+		case StrVal(v,i)
+		=> Option(convIntoSQL(v, arg.dom)) match {
+			case None       => sql.setNull(  pos, VARCHAR)
+			case Some(some) => sql.setString(pos, some)
+		}
+	}}
+
+	/**
+	 * Converts a value obtained from JDBC
+	 *
+	 * By default, this is an identity function. Override it
+	 * to implement a custom value mapper.
+	 */
+	protected def convFromSQL[T]
+	(scalogicObject: T, domain: Domain)
+	= scalogicObject
+
+	private def string2BigInt(s: String)
+	= s match {
+		case null => null
+		case some => BigInt(some)
+	}
+
+	private def bigDecimal2dec(b: BigDecimal)
+	= b match {
+		case null => null
+		case some => BigDec(some)
 	}
 
 	/**
@@ -132,40 +175,19 @@ abstract class Adaptor extends Logging {
 		trace(s"Extracting value from column '$column' using '$domain'.")
 
 		domain match {
-		case int: Integral[_] => int.zero match  {
-			case _:Int => Val(
-				result.getInt(column),
-				domain.asInstanceOf[Domain with Integral[Int]])
+			case IntDom(_,d)  => Val(convFromSQL(result.getInt(column),d),d)
+			case LongDom(_,d)  => Val(convFromSQL(result.getLong(column),d),d)
+			case BigIntDom(_,d) => Val(convFromSQL(string2BigInt(
+				result.getString(column) ),d),d)
 
-			case _:Long => Val(
-				result.getLong(column),
-				domain.asInstanceOf[Domain with Integral[Long]])
+			case FloatDom(_,d) => Val(convFromSQL(result.getFloat(column),d),d)
+			case DoubleDom(_,d) => Val(convFromSQL(result.getDouble(column),d),d)
+			case BigDecDom(_,d)  => Val(convFromSQL(bigDecimal2dec(
+				result.getBigDecimal(column) ),d),d)
 
-			case _:BigInt => Val(
-				BigInt(result.getLong(column)), // TODO: Can we do better?
-				domain.asInstanceOf[Domain with Integral[BigInt]])
-
-			case _ => throw new Exception("Unsupported domain type: " + domain)
+			case _ => Val(result.getString(column), domain)
 		}
-
-		case frac: Fractional[_] => frac.zero match  {
-			case _:Float => Val(
-				result.getFloat(column),
-				domain.asInstanceOf[Domain with Fractional[Float]])
-
-			case _:Double => Val(
-				result.getDouble(column),
-				domain.asInstanceOf[Domain with Fractional[Double]])
-
-			case _:BigDecimal => Val(
-				result.getBigDecimal(column),
-				domain.asInstanceOf[Domain with Fractional[BigDecimal]])
-
-			case _ => throw new Exception("Unsupported domain type: " + domain)
-		}
-
-		case _ => Val(result.getString(column), domain)
-	}}
+	}
 
 	/** Converts a table name into SQL-insertable string */
 	def escapeTable(s: String) = Tools.quote(s)
@@ -176,9 +198,7 @@ abstract class Adaptor extends Logging {
 	/** Converts a table and column name into SQL-insertable index name */
 	def escapeIndex(t: String, c: String) = Tools.quote(t + "_" + c)
 
-	/**
-	 * Defines the name of SQL column in the schema based on the domain
-	 */
+	/** Defines the name of SQL column in the schema based on the domain */
 	def columnDefinition(d: Domain) = d match {
 		case _:Fractional[_] => "DOUBLE PRECISION"
 		case _:Numeric[_] => "NUMERIC"
@@ -191,9 +211,8 @@ abstract class Adaptor extends Logging {
 /**
  * Keeps the connection in the cache
  *
- * If there is any exception when the connection is in use,
- * the connection is closed and a new one is created on the
- * next request.
+ * If there is any exception when the connection is in use, the
+ * connection is closed and a new one is created on the next request.
  *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
@@ -214,9 +233,9 @@ trait ConnectionCache
 		try   { handler(connection) }
 		catch { case e: Throwable => {
 			cache = None
-			info("SQL handler failed. Cache emptied, closing connection.")
+			info("Handler failed. Cache emptied, closing connection, rethrowing.")
 			try   { connection.close() }
-			catch { case e: Throwable => {} }
+			catch { case e: Throwable => debug("Error while closing connection.",e) }
 			throw e
 		}}
 	}
@@ -231,13 +250,12 @@ trait ConnectionCache
 
 /**
  * Adaptor that resets itself every N queries
- *
  */
 trait ResettingCache extends ConnectionCache {
 
 	/**
-	 * Number of [[cernoch.scalogic.sql.Adaptor.withConnection]]
-	 * calls with the current connection.
+	 * Number of [[cernoch.scalogic.sql.Adaptor.withConnection]] calls
+	 * that happened using the current connection.
 	 */
 	protected var usageCounter = 0
 
@@ -263,12 +281,15 @@ trait ResettingCache extends ConnectionCache {
 
 
 /**
- * Prints every query to stdout
+ * Logs every query as ''INFO''.
+ *
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 trait QueryLogger extends Adaptor {
 
-	protected def handle(s: String) = info(s"Executing query:\n$s")
+	protected def handle(s: String) {
+		info(s"Executing query:\n$s")
+	}
 
 	override protected def prepare
 	(con: Connection,
