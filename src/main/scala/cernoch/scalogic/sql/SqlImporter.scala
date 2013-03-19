@@ -2,6 +2,8 @@ package cernoch.scalogic.sql
 
 import exceptions.BackendError
 import cernoch.scalogic._
+import tools.Labeler
+import grizzled.slf4j.Logging
 
 /**
  * Imports data into the database
@@ -10,7 +12,7 @@ import cernoch.scalogic._
  */
 class SqlImporter private[sql]
 (ada: Adaptor, sch: List[Atom])
-	extends IsEnabled {
+	extends IsEnabled with Logging {
 
 	private val som2aom = new ArchetypeIndex(sch)
 	private val aom2sql = new ArchetypeNames(ada,sch);import aom2sql._
@@ -31,6 +33,8 @@ class SqlImporter private[sql]
 	 */
 	def put(atom: Atom) { onlyIfEnabled {
 
+		debug(s"Importing atom\n${atom.toString(false,Labeler.alphabet)}")
+
 		// Create a dummy query
 		val sql = "INSERT INTO " + aom2esc(som2aom(atom)) +
 			atom.args.map{ _ => "?" }.mkString(" VALUES ( ", ", ", " )")
@@ -38,9 +42,10 @@ class SqlImporter private[sql]
 		val valArgs = atom.args.map{_ match {
 			case v: Val => v
 			case _ => throw new IllegalArgumentException(
-				"Imported atom must only contain Values"
-			)
+				"Imported atom must only contain Values" )
 		}}
+
+		debug(s"Translated into SQL query:\n$sql\n$valArgs")
 
 		// And execute!
 		ada.withConnection(con => {
@@ -52,13 +57,18 @@ class SqlImporter private[sql]
 	}}
 
 	def done() = tryClose {
+		debug("Finishing the import, creating indexes.")
 		ada.withConnection(con => {
 			sch.foreach( btom => {
 				btom.vars.map(bVar =>
 					"CREATE INDEX " + idx2esc(btom)(bVar) +
 						" ON " + aom2esc(btom) +
 						" (" + avr2esc(btom)(bVar) + ")"
-				).foreach(sql => ada.execute(con,sql)) })
+				).foreach(sql => {
+					trace(s"Creating index using SQL\n$sql")
+					ada.execute(con,sql)
+				})
+			})
 		})
 		new SqlExecutor(ada,sch)
 	}

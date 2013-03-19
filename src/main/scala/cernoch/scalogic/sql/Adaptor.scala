@@ -4,12 +4,13 @@ import java.sql._
 import Types._
 import cernoch.scalogic._
 import math.{BigInt, BigDecimal => BigDec}
+import grizzled.slf4j.Logging
 
 
 /**
  * Encapsulates a JDBC connection and defines the SQL dialect
  */
-abstract class Adaptor {
+abstract class Adaptor extends Logging {
 
 	/**
 	 * Create a new JDBC connection
@@ -27,9 +28,13 @@ abstract class Adaptor {
 	def withConnection[T]
 	(handler: Connection => T)
 	= {
+		debug("Creating a new connection.")
 		val connection = createCon
 		try { handler(connection) }
-		finally { connection.close() }
+		finally {
+			connection.close()
+			debug("Connection has been closed.")
+		}
 	}
 
 
@@ -37,9 +42,13 @@ abstract class Adaptor {
 	(con: Connection, sql: String,
 	 arg: List[Val] = List())
 	= {
-		val statement = prepare(con, sql, arg)
+		trace(s"Update query called.\n$sql")
+		val statement = prepare(con,sql,arg)
 		try { statement.executeUpdate() }
-		finally { statement.close() }
+		finally {
+			statement.close()
+			trace(s"Statement closed.")
+		}
 	}
 
 	def query[T]
@@ -47,18 +56,25 @@ abstract class Adaptor {
 	 arg: List[Val] = List(),
 	 handler: ResultSet => T)
 	= {
+		trace(s"Executing query.\n$sql")
 		val query = prepare(con, sql, arg).executeQuery()
 		try { handler(query) }
-		finally { query.close() }
+		finally { query.close()
+			trace(s"Query closed.")
+		}
 	}
 
 	def execute
 	(con: Connection, sql: String,
 	 arguments: List[Val] = List()): Boolean
 	= {
+		trace(s"Executing statement.\n$sql")
 		val statement = prepare(con, sql, arguments)
 		try { statement.execute() }
-		finally { statement.close() }
+		finally {
+			statement.close()
+			trace(s"Statement closed.")
+		}
 	}
 
 	protected def prepare
@@ -66,9 +82,13 @@ abstract class Adaptor {
 	 sql: String, arg: List[Val] = List())
 	: PreparedStatement
 	= {
+		trace(s"Preparing statement.\n$sql")
 		val statement = con.prepareStatement(sql)
-		for ((arg,pos) <- arg zip Stream.from(1))
+
+		for ((arg,pos) <- arg zip Stream.from(1)) {
+			trace(s"Injecting value $arg into the query at pos $pos.")
 			injectArgument(statement, pos, arg)
+		}
 		statement
 	}
 
@@ -108,7 +128,10 @@ abstract class Adaptor {
 	 column: String,
 	 domain: Domain)
 	: Val
-	= domain match {
+	= {
+		trace(s"Extracting value from column '$column' using '$domain'.")
+
+		domain match {
 		case int: Integral[_] => int.zero match  {
 			case _:Int => Val(
 				result.getInt(column),
@@ -142,7 +165,7 @@ abstract class Adaptor {
 		}
 
 		case _ => Val(result.getString(column), domain)
-	}
+	}}
 
 	/** Converts a table name into SQL-insertable string */
 	def escapeTable(s: String) = Tools.quote(s)
@@ -184,12 +207,14 @@ trait ConnectionCache
 	(handler: Connection => T)
 	= {
 		val connection = cache.getOrElse {
+			debug("No connection in the cache. Creating a new one.")
 			cache = Some(createCon)
 			cache.get
 		}
 		try   { handler(connection) }
 		catch { case e: Throwable => {
 			cache = None
+			info("SQL handler failed. Cache emptied, closing connection.")
 			try   { connection.close() }
 			catch { case e: Throwable => {} }
 			throw e
@@ -211,17 +236,23 @@ trait ConnectionCache
 trait ResettingCache extends ConnectionCache {
 
 	/**
-	 * Number of [[Adaptor.withConnection]]
-	 * calls with the current connection
+	 * Number of [[cernoch.scalogic.sql.Adaptor.withConnection]]
+	 * calls with the current connection.
 	 */
 	protected var usageCounter = 0
 
+	/**
+	 * Maximum number of [[cernoch.scalogic.sql.Adaptor.withConnection]]
+	 * calls before the connection cache is flushed.
+	 */
 	protected var usageLimit = 1000
 
 	override def withConnection[T](f: Connection => T)
 	= {
 		usageCounter = usageCounter + 1
+		trace(s"Connection requested for $usageCounter-th time.")
 		if (usageCounter > usageLimit) {
+			debug(s"Resetting limit reached. Resetting connection.")
 			usageCounter = 0
 			close
 		}
@@ -237,11 +268,9 @@ trait ResettingCache extends ConnectionCache {
  */
 trait QueryLogger extends Adaptor {
 
-	protected def handle(s: String)
-	= println(s + ";")
+	protected def handle(s: String) = info(s"Executing query:\n$s")
 
-	override protected
-	def prepare
+	override protected def prepare
 	(con: Connection,
 	 sql: String,
 	 arg: List[Val])

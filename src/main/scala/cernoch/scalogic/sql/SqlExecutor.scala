@@ -2,8 +2,10 @@ package cernoch.scalogic.sql
 
 import cernoch.scalogic._
 import collection.mutable.{ListBuffer, ArrayBuffer}
+import tools.Labeler
 import tools.StringUtils._
 import Tools._
+import grizzled.slf4j.Logging
 
 /**
  * Executes SQL queries and returns variable bindings
@@ -30,7 +32,7 @@ import Tools._
  */
 class SqlExecutor private[sql]
 	(ada: Adaptor, sch: List[Atom])
-	extends IsEnabled {
+	extends IsEnabled with Logging {
 
 	/** Maps each som to its aom */
 	private val som2aom = new ArchetypeIndex(sch)
@@ -39,9 +41,11 @@ class SqlExecutor private[sql]
 	private val names = new ArchetypeNames(ada,sch); import names._
 
 	def query
-	( q: Horn[Set[Atom]],
-		callback: Map[Var,Val] => Unit )
+	(q: Horn[Set[Atom]],
+	 callback: Map[Var,Val] => Unit )
 	= onlyIfEnabled {
+
+		debug(s"Executing query\n${q.toString(false,Labeler.alphabet)}")
 
 		/**
 		 * Atom is stored if it is not built-in
@@ -166,6 +170,9 @@ class SqlExecutor private[sql]
 			( " FROM "|::  FROM  join ", " ) +
 			(" WHERE "|:: WHERE  join " AND ")
 
+		debug(s"Translated into SQL query\n$SQL\n" +
+			(BINDS zip Stream.from(1)).foreach(_.swap))
+
 		ada.withConnection(con => {
 			ada.query(con, SQL, BINDS.toList, result => {
 				while (result.next()) {
@@ -178,6 +185,7 @@ class SqlExecutor private[sql]
 								hVar -> ada.extractArgument(result, col, dom)
 							}
 
+					trace("Calling callback with values\n" + headMap)
 					callback(headMap.toMap)
 				}
 			})

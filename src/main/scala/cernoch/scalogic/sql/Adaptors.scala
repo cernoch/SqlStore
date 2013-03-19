@@ -22,14 +22,17 @@ class MySQLAdaptor
 		.replaceAll("-","_")
 
 	protected val url
-	= "jdbc:mysql://" + host + ":" + port + "/" + base +
-		List("useUnicode=yes",
+	= "jdbc:mysql://" + host + ":" + port + "/" + base + List(
+			"useUnicode=yes",
 			"characterEncoding=UTF-8",
 			"connectionCollation=utf8_general_ci"
 		).mkString("?", "&amp;", "")
 
 	Class.forName("com.mysql.jdbc.Driver").newInstance()
-	def createCon = DriverManager.getConnection(url,user, pass)
+	def createCon = {
+		debug(s"MySQL adaptor is connecting to URL\n$url")
+		DriverManager.getConnection(url,user,pass)
+	}
 }
 
 class PostgresAdaptor
@@ -47,7 +50,10 @@ class PostgresAdaptor
 
 	protected val url = "jdbc:postgresql://" + host + ":" + port + "/" + base
 	Class.forName("org.postgresql.Driver").newInstance()
-	def createCon = DriverManager.getConnection(url, user, pass)
+	def createCon = {
+		debug(s"Postgres adaptor is connecting to URL\n$url")
+		DriverManager.getConnection(url, user, pass)
+	}
 }
 
 /**
@@ -59,7 +65,10 @@ class DerbyMemAdaptor(db: String) extends Adaptor {
 
 	protected val url = "jdbc:derby:memory:"+db+";create=true"
 	Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
-	def createCon = DriverManager.getConnection(url)
+	def createCon = {
+		debug(s"Derby-in-memory is connecting to URL\n$url")
+		DriverManager.getConnection(url)
+	}
 
 	override def columnDefinition(d: Domain)
 	= d match {
