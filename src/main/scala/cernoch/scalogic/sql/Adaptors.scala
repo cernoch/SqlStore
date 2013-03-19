@@ -28,7 +28,7 @@ class MySQLAdaptor
 			"connectionCollation=utf8_general_ci"
 		).mkString("?", "&amp;", "")
 
-	Class.forName("com.mysql.jdbc.Driver").newInstance()
+	new com.mysql.jdbc.Driver()
 	def createCon = {
 		debug(s"MySQL adaptor is connecting to URL\n$url")
 		DriverManager.getConnection(url,user,pass)
@@ -49,7 +49,7 @@ class PostgresAdaptor
 	override def escapeIndex(t: String, c: String) = Tools.quote(pfix + t + "_" + c)
 
 	protected val url = "jdbc:postgresql://" + host + ":" + port + "/" + base
-	Class.forName("org.postgresql.Driver").newInstance()
+	new org.postgresql.Driver()
 	def createCon = {
 		debug(s"Postgres adaptor is connecting to URL\n$url")
 		DriverManager.getConnection(url, user, pass)
@@ -64,7 +64,7 @@ class PostgresAdaptor
 class DerbyMemAdaptor(db: String) extends Adaptor {
 
 	protected val url = "jdbc:derby:memory:"+db+";create=true"
-	Class.forName("org.apache.derby.jdbc.EmbeddedDriver").newInstance()
+	new org.apache.derby.jdbc.EmbeddedDriver()
 	def createCon = {
 		debug(s"Derby-in-memory is connecting to URL\n$url")
 		DriverManager.getConnection(url)
