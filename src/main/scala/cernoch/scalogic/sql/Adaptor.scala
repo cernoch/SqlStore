@@ -288,7 +288,7 @@ trait ResettingCache extends ConnectionCache {
 trait QueryLogger extends Adaptor {
 
 	protected def handle(s: String) {
-		info(s"Executing query:\n$s")
+		info(s"Executing query: $s")
 	}
 
 	override protected def prepare

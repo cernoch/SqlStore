@@ -45,7 +45,7 @@ class SqlExecutor private[sql]
 	 callback: Map[Var,Val] => Unit )
 	= onlyIfEnabled {
 
-		debug(s"Executing query\n${q.toString(false,Labeler.alphabet)}")
+		debug(s"Executing query: ${q.toString(false,Labeler.alphabet)}")
 
 		/**
 		 * Atom is stored if it is not built-in

@@ -74,34 +74,34 @@ class SchemaSniffer(ada: Adaptor) extends Logging {
 
 		override def toString =
 			s"Dat:${dat.can} => ${dat.min}..${dat.max}; " +
-				s"Num:${num.can} => ${num.min}..${num.max}; " +
-				s"Dec:${dec.can} => ${dec.min}..${dec.max}; " +
-				s"Cat:${cat.can} => ${cat.all}"
+			s"Num:${num.can} => ${num.min}..${num.max}; " +
+			s"Dec:${dec.can} => ${dec.min}..${dec.max}; " +
+			s"Cat:${cat.can} => ${cat.all}"
 	}
 
-	def detectAtoms
-	(relation: String, domains: Set[String])
+	def detectAtoms (table: String, domains: Set[String])
 	= {
 		import SchemaSniffer._
+		val domList = domains.toList
 
-		debug(s"Detecting schema for relation $relation" +
-		      s" and domains ${domains.mkString(", ")}." )
+		debug(s"Detecting schema for relation $table" +
+		      s" and domains ${domList.mkString(", ")}." )
 
-		if (domains.isEmpty) throw new IllegalArgumentException(
+		if (domList.isEmpty) throw new IllegalArgumentException(
 			"The list of columns is empty. Nothing to detect." )
 
-		val idx = (domains.view zip Stream.from(1)).toMap
-		val cpp = (domains.view map {d => d -> new Column()}).toMap
+		val idx = (domList.view zip Stream.from(1)).toMap
+		val cpp = (domList.view map {d => d -> new Column()}).toMap
 
 		val sql =
-			s" SELECT ${domains map ada.escapeColumn mkString ", "}" +
-			s" FROM ${ada escapeTable relation}"
+			s" SELECT ${domList map ada.escapeColumn mkString ", "}" +
+			s" FROM ${ada escapeTable table}"
 
 		ada.withConnection{ ada.query(_, sql, handler = res => {
 
 			val meta = res.getMetaData
 
-			for (name <- domains; i = idx(name); prop = cpp(name)) {
+			for (name <- domList; i = idx(name); prop = cpp(name)) {
 				meta.getColumnType(i) match {
 					case Types.DATE  => prop.dat.can = true
 					case Types.TIME    => prop.dat.can = true
@@ -126,12 +126,12 @@ class SchemaSniffer(ada: Adaptor) extends Logging {
 					case Types.LONGVARCHAR => prop.cat.can = true
 					case Types.LONGNVARCHAR => prop.cat.can = true
 					case v => throw new IllegalArgumentException(
-						s"Unsupported column type: ${meta.getColumnTypeName(i+1)}.")
+						s"Unsupported column type: ${meta.getColumnTypeName(i)}.")
 				}
 			}
 
 			while (res.next()) {
-				for (name <- domains; i = idx(name); prop = cpp(name)) {
+				for (name <- domList; i = idx(name); prop = cpp(name)) {
 
 					meta.getColumnType(i) match {
 						case Types.DATE  => prop += (res getDate i)
@@ -160,7 +160,7 @@ class SchemaSniffer(ada: Adaptor) extends Logging {
 				}
 			}
 
-			for (name <- domains; i = idx(name); prop = cpp(name)) yield {
+			for (name <- domList; i = idx(name); prop = cpp(name)) yield {
 
 				if (prop.num.can) {
 					debug(s"Column ${name} was recognized as Numeric")
