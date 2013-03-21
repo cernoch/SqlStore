@@ -99,7 +99,7 @@ abstract class Adaptor extends Logging {
 	 * By default, this is an identity function. Override it
 	 * to implement a custom value mapper.
 	 */
-	protected def convIntoSQL[T]
+	protected[sql] def convIntoSQL[T]
 	(scalogicObject: T, domain: Domain)
 	= scalogicObject
 
@@ -147,7 +147,7 @@ abstract class Adaptor extends Logging {
 	 * By default, this is an identity function. Override it
 	 * to implement a custom value mapper.
 	 */
-	protected def convFromSQL[T]
+	protected[sql] def convFromSQL[T]
 	(scalogicObject: T, domain: Domain)
 	= scalogicObject
 
@@ -175,8 +175,8 @@ abstract class Adaptor extends Logging {
 		trace(s"Extracting value from column '$column' using '$domain'.")
 
 		domain match {
-			case IntDom(_,d)  => Val(convFromSQL(result.getInt(column),d),d)
-			case LongDom(_,d)  => Val(convFromSQL(result.getLong(column),d),d)
+			case    IntDom(_,d) => Val(convFromSQL(result.getInt(column),d),d)
+			case   LongDom(_,d) => Val(convFromSQL(result.getLong(column),d),d)
 			case BigIntDom(_,d) => Val(convFromSQL(string2BigInt(
 				result.getString(column) ),d),d)
 
@@ -185,7 +185,7 @@ abstract class Adaptor extends Logging {
 			case BigDecDom(_,d)  => Val(convFromSQL(bigDecimal2dec(
 				result.getBigDecimal(column) ),d),d)
 
-			case _ => Val(result.getString(column), domain)
+			case _ => Val(convFromSQL(result.getString(column),domain),domain)
 		}
 	}
 

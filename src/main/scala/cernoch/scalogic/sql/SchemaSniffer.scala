@@ -84,8 +84,8 @@ class SchemaSniffer(ada: Adaptor) extends Logging {
 	= {
 		import SchemaSniffer._
 
-		debug(s"Detecting schema for relation ${relation}" +
-			s" and domains ${domains.mkString(", ")}.")
+		debug(s"Detecting schema for relation $relation" +
+		      s" and domains ${domains.mkString(", ")}." )
 
 		if (domains.isEmpty) throw new IllegalArgumentException(
 			"The list of columns is empty. Nothing to detect." )
