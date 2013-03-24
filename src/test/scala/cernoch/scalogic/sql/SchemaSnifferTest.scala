@@ -28,14 +28,12 @@ class SchemaSnifferTest extends Specification {
 					+   " \"bigdec\" NUMERIC(30)\n)"
 			).execute()
 
-			val smallint   = Stream.from(1,10).map{_.toShort}.iterator
-			val integer   = Stream.from(1000,100).iterator
-			val char     = Stream.from(64,1).map{_.toChar}.iterator
-			val double  = Stream.from(0,1).map(fib).map{_.toDouble}.iterator
+			val smallint = Stream.from(1,10).map{_.toShort}.iterator
+			val integer = Stream.from(1000,100).iterator
+			val char   = Stream.from(64,1).map{_.toChar}.iterator
+			val double = Stream.from(0,1).map(fib).map{_.toDouble}.iterator
 			val string = Stream.from(0,1).map(fib).map{_.toString}.iterator
-
-			val date = Stream.from(16000,1).map{_.toLong * 24 * 60 * 60 * 1000}.iterator
-
+			val date   = Stream.from(16000,1).map{_.toLong * 24 * 60 * 60 * 1000}.iterator
 			val bigDec = Stream.from(1,1).map{BigDecimal(2).pow(_)}.iterator
 
 			for (row <- 1 to 32) {
@@ -45,7 +43,7 @@ class SchemaSnifferTest extends Specification {
 				st.setString(     3, char.next().toString)
 				st.setString(     4, string.next())
 				st.setDouble(     5, double.next())
-				st.setDate(       6, new java.sql.Date(date.next()))
+				st.setDate  (     6, new java.sql.Date(date.next()))
 				st.setBigDecimal( 7, bigDec.next().bigDecimal)
 				st.execute()
 			}

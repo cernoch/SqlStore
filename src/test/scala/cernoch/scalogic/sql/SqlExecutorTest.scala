@@ -4,9 +4,10 @@ import org.junit.runner.RunWith
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
 import cernoch.scalogic._
+import collection.mutable
 
 @RunWith(classOf[JUnitRunner])
-class SqlTest extends Specification {
+class SqlExecutorTest extends Specification {
 
 	object Dom {
 		val person = StrDom("person")
@@ -143,39 +144,24 @@ class SqlTest extends Specification {
 
 	"SQL storage" should {
 
-		"import data without an exception" in {
-			val storage
-			= new SqlStorage(
-				new DerbyMemAdaptor("test1"),
-				Sch.all)
+		import Var._; import Obj._; import Sch._
 
-			fixtures(storage)
+		val engine = fixtures(new SqlStorage(
+			new DerbyMemAdaptor("test1"),
+			Sch.all))
 
-			true
-		}
-
-		"execute simple query correctly" in {
-			import Var._
-			import Obj._
-			import Sch._
-
-			val adaptor = new DerbyMemAdaptor("test2")
-			val storage = new SqlStorage(adaptor, Sch.all)
-			val engine = fixtures(storage)
-			val query = Horn(
-				Atom("head", person1, doors1),
-				Set(
-					(people.atom),
-					(ownership.atom),
-					(cars.atom.subst(color1 -> white))
-				)
+		"execute simple query" in {
+			val query = Set(
+				people,
+				ownership,
+				cars.subst(color1 -> white)
 			)
 
-			val out = collection.mutable.HashSet[List[Val]]()
+			val out = mutable.HashSet[List[Val]]() // Store results
 
-			engine.query(query, mapa => {
-				out.add(query.head.vars.map(mapa))
-			})
+			engine.prepare(query).select( Set(person1,doors1),
+				result => out += List(person1, doors1).map(result)
+			) // ^^ This is the callback ^^
 
 			out must_== Set(
 				List(pepa,   twoDoors),
@@ -184,49 +170,41 @@ class SqlTest extends Specification {
 			)
 		}
 
-
-
-		"query same table twice" in {
-			import Var._
-			import Obj._
-			import Sch._
-
-			val engine = fixtures(new SqlStorage(new DerbyMemAdaptor("test3"), Sch.all))
-
-			val q = new Horn(
-				Atom("head", person1, car1),
-				Set[Atom](
-					ownership,
-					ownership.subst(car1 -> redForTwo)
-				)
+		"estimate the number of results" in {
+			val query = Set[Atom](
+				ownership,
+				ownership.subst(car1 -> redForTwo)
 			)
 
-			val out = collection.mutable.HashSet[List[Val]]()
+			engine.prepare(query).count must_== 2
+		}
 
-			engine.query(q, mapa => {
-				val list = q.head.vars.map(mapa)
+		"handle self-join" in {
+			val query = Set(
+				ownership,
+				ownership.subst(car1 -> redForTwo)
+			)
+
+			val out = mutable.HashSet[List[Val]]() // Store results
+
+			engine.prepare(query).select(Set(person1,car1), mapa => {
+				val list = List(person1,car1).map(mapa)
 				if (list(0) != list(1)) out.add(list)
-			})
+			}) // ^^ This is the callback ^^
+
 			out must_== Set(
 				List(pepa, redForTwo),
 				List(pepa, whiteForTwo)
 			)
 		}
 
-
-
 		"handle variable inequalities" in {
-			import Var._
-			import Obj._
-			import Sch._
+			// Inequality between numeric attributes
+			val inEq = Atom("<", doors1, fourDoors)
 
-			val engine = fixtures(new SqlStorage(new DerbyMemAdaptor("test4"), Sch.all))
-
-			val q = Horn( Atom("head", car1),
-				Set(cars, Atom("<", doors1, fourDoors)) )
-
+			val query = Horn(Atom("head", car1), Set(cars, inEq))
 			val out = collection.mutable.HashSet[Val]()
-			engine.query( q, mapa => out.add(mapa(car1)) )
+			engine.query( query, mapa => out.add(mapa(car1)) )
 			out must_== Set(whiteForTwo, redForTwo)
 		}
 	}
