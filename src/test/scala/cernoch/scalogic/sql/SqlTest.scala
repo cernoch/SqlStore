@@ -159,13 +159,10 @@ class SqlTest extends Specification {
 			import Obj._
 			import Sch._
 
-			val engine
-			= fixtures(
-				new SqlStorage(
-					new DerbyMemAdaptor("test2"),
-					Sch.all) )
-
-			val q = Horn(
+			val adaptor = new DerbyMemAdaptor("test2")
+			val storage = new SqlStorage(adaptor, Sch.all)
+			val engine = fixtures(storage)
+			val query = Horn(
 				Atom("head", person1, doors1),
 				Set(
 					(people.atom),
@@ -176,7 +173,10 @@ class SqlTest extends Specification {
 
 			val out = collection.mutable.HashSet[List[Val]]()
 
-			engine.query(q, mapa => { out.add(q.head.vars.map(mapa)) })
+			engine.query(query, mapa => {
+				out.add(query.head.vars.map(mapa))
+			})
+
 			out must_== Set(
 				List(pepa,   twoDoors),
 				List(franta, twoDoors),

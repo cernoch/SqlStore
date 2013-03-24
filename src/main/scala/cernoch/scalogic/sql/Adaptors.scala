@@ -70,6 +70,8 @@ class DerbyMemAdaptor(db: String) extends Adaptor {
 		DriverManager.getConnection(url)
 	}
 
+	override def queryLimit = None
+
 	override def columnDefinition(d: Domain)
 	= d match {
 		case _:Fractional[_] => "DOUBLE PRECISION"

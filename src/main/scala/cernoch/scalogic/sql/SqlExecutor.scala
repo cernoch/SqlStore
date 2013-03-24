@@ -166,29 +166,55 @@ class SqlExecutor private[sql]
 			bom => WHERE += BuiltInAtoms.toWHERE(BINDS,svr2esc)(bom))
 
 		val SQL =
-			("SELECT "|:: SELECT mk   ", " ) +
-			( " FROM "|::  FROM  join ", " ) +
-			(" WHERE "|:: WHERE  join " AND ")
+			("SELECT "|:: SELECT mk  ", " ) +
+			( " FROM "|::  FROM join ", " ) +
+			(" WHERE "|:: WHERE join " AND ")
 
 		debug(s"Translated into SQL query\n$SQL\n" +
 			(BINDS zip Stream.from(1)).foreach(_.swap))
 
+		val headDef = q.head.vars.map{ hVar => (hVar, headCols(hVar), hVar.dom) }
+
 		ada.withConnection(con => {
-			ada.query(con, SQL, BINDS.toList, result => {
-				while (result.next()) {
+			ada.queryLimit match {
 
-					val headMap =
-						for (hVar <- q.head.vars)
-							yield {
-								val col = headCols(hVar)
-								val dom = hVar.dom
-								hVar -> ada.extractArgument(result, col, dom)
+				case None => {
+					ada.query(con, SQL, BINDS.toList, result => {
+						while (result.next()) {
+
+							val headMap = headDef.map {
+								case (v,c,d) => v -> ada.extractArgument(result,c,d)
 							}
-
-					trace("Calling callback with values\n" + headMap)
-					callback(headMap.toMap)
+							trace("Calling callback with values\n" + headMap)
+							callback(headMap.toMap)
+						}
+					})
 				}
-			})
+
+				case Some(queryLimit) => {
+					var skipped = 0
+					var wasEmpty = true
+					do {
+						wasEmpty = true
+						val limSql = s"$SQL LIMIT $skipped, $queryLimit"
+						ada.query(con, limSql, BINDS.toList, result => {
+
+							while (result.next()) {
+								wasEmpty = false
+
+								val headMap = headDef.map {
+									case (v,c,d) => v -> ada.extractArgument(result,c,d)
+								}
+
+								trace("Calling callback with values\n" + headMap)
+								callback(headMap.toMap)
+							}
+						})
+						skipped += queryLimit
+					} while (!wasEmpty)
+
+				}
+			}
 		})
 	}
 }

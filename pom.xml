@@ -36,7 +36,7 @@
 		<!-- Compile -->
 		<dependency><groupId>cernoch.scalogic</groupId>
 			<artifactId>scalogic_${scala.version}</artifactId>
-			<version>1.1-SNAPSHOT</version></dependency>
+			<version>1.1</version></dependency>
 		<dependency><groupId>org.clapper</groupId>
 			<artifactId>grizzled-slf4j_${scala.version}</artifactId>
 			<version>1.0.1</version></dependency>

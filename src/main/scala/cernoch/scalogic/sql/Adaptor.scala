@@ -14,6 +14,11 @@ import grizzled.slf4j.Logging
 abstract class Adaptor extends Logging {
 
 	/**
+	 * Number of results per query
+	 */
+	def queryLimit: Option[Int] = Some(1000)
+
+	/**
 	 * Create a new JDBC connection
 	 *
 	 * WARNING: The caller is responsible for closing the connection!
