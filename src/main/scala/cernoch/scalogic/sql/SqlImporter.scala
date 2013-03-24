@@ -11,11 +11,12 @@ import grizzled.slf4j.Logging
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class SqlImporter private[sql]
-(ada: Adaptor, sch: List[Atom])
-	extends IsEnabled with Logging {
-
-	private val som2aom = new ArchetypeIndex(sch)
-	private val aom2sql = new ArchetypeNames(ada,sch);import aom2sql._
+	(ada: Adaptor,
+	 sch: List[Atom],
+	 aom2sql: Archetypes)
+	extends IsEnabled
+	with Logging {
+	import aom2sql._
 
 	/**
 	 * Imports a single clause into the database
@@ -36,7 +37,7 @@ class SqlImporter private[sql]
 		debug(s"Importing atom\n${atom.toString(false,Labeler.alphabet)}")
 
 		// Create a dummy query
-		val sql = "INSERT INTO " + aom2esc(som2aom(atom)) +
+		val sql = "INSERT INTO " + aom2esc(aom2sql(atom)) +
 			atom.args.map{ _ => "?" }.mkString(" VALUES ( ", ", ", " )")
 
 		val valArgs = atom.args.map{_ match {
@@ -70,6 +71,6 @@ class SqlImporter private[sql]
 				})
 			})
 		})
-		new SqlExecutor(ada,sch)
+		new SqlExecutor(ada,aom2sql)
 	}
 }

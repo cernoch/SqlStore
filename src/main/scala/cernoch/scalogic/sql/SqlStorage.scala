@@ -11,17 +11,17 @@ import grizzled.slf4j.Logging
 class SqlStorage(ada: Adaptor, sch: List[Atom])
 	extends IsEnabled with Logging { storage =>
 
-	private val names = new ArchetypeNames(ada, sch);import names._
+	private val names = new Archetypes(ada, sch);import names._
 
 	/**
 	 * Opens the connection to an already-created database
 	 */
-	def open = tryClose {new SqlExecutor(ada, sch)}
+	def open = tryClose {new SqlExecutor(ada, names)}
 
 	/**
 	 * Removes all tables from the database and recreates its structure
 	 */
-	def reset() = { tryClose {
+	def reset() = tryClose {
 		ada.withConnection(con => {
 			sch.view // We need not to store the result
 				.map (aom2esc) // Get SQL-escaped identifier
@@ -45,6 +45,6 @@ class SqlStorage(ada: Adaptor, sch: List[Atom])
 				})
 		})
 
-		new SqlImporter(ada, sch)
-	}}
+		new SqlImporter(ada, sch, names)
+	}
 }

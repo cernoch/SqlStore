@@ -31,14 +31,10 @@ import grizzled.slf4j.Logging
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
 class SqlExecutor private[sql]
-	(ada: Adaptor, sch: List[Atom])
-	extends IsEnabled with Logging {
-
-	/** Maps each som to its aom */
-	private val som2aom = new ArchetypeIndex(sch)
-
-	/** Maps each aom to its name */
-	private val names = new ArchetypeNames(ada,sch); import names._
+	(ada: Adaptor, som2aom: Archetypes)
+	extends IsEnabled
+	with Logging {
+	import som2aom._
 
 	def query
 	(q: Horn[Set[Atom]],

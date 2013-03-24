@@ -1,6 +1,7 @@
 package cernoch.scalogic.sql
 
 import cernoch.scalogic._
+import exceptions.SchemaMismash
 import Tools._
 
 /**
@@ -12,11 +13,13 @@ import Tools._
  * we simply use the [[cernoch.scalogic.sql.Tools.name]] function,
  * which automatically ensures uniqueness.
  *
+ * Additionally, this
+ *
  * @param ada Adaptor providing correct escape routines
  * @param sch SQL schema as a list of atoms
  * @author Radomír Černoch (radomir.cernoch at gmail.com)
  */
-private class ArchetypeNames(ada: Adaptor, sch: List[Atom]) {
+private class Archetypes(ada: Adaptor, sch: List[Atom]) {
 
 	/** Assign each atom in the sch a unique table name */
 	val aom2sql = name(sch){_.pred}
@@ -33,4 +36,23 @@ private class ArchetypeNames(ada: Adaptor, sch: List[Atom]) {
 	/** Escaped index name to be used directly in SQL */
 	def idx2esc(atom: Atom)(aVar: Var)
 	= ada escapeIndex(aom2sql(atom), avr2sql(atom)(aVar))
+
+
+
+	/** Groups schema atoms by their signature */
+	private val index = sch
+		.groupBy(Tools.signature)
+		.mapValues {
+			case List(singleValue) => singleValue
+			case errList => throw new SchemaMismash(
+				s"Multiple modes have the same signature: $errList"
+			)
+		}
+
+	/** Finds the respective atom in the schema */
+	def apply(a: Atom)
+	= try { index(Tools.signature(a)) }
+	catch { case cause: NoSuchElementException => throw new
+		SchemaMismash("Atom was not found in the schema.", cause)
+	}
 }
