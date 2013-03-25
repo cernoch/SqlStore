@@ -7,6 +7,7 @@ import cernoch.scalogic.tools.StringUtils._
 
 import collection.mutable.{ListBuffer, ArrayBuffer}
 import grizzled.slf4j.Logging
+import java.util.NoSuchElementException
 
 class JoinModel
 	(ada: Adaptor,
@@ -61,6 +62,27 @@ class JoinModel
 	 */
 	private def occ2esc(occ: (Atom,Atom,Var)) = avr2esc(occ._2)(occ._3)
 	private def occ2sql(occ: (Atom,Atom,Var)) = avr2sql(occ._2)(occ._3)
+
+	/**
+	 * Gives the column name for the given variable
+	 */
+	def varName(variable: Var)
+	= try { Some(svr2esc(variable)) }
+	catch { case _: NoSuchElementException => None }
+
+	def queryBody = {
+		val WHERE = WHERE_BINDS._1
+		val BINDS = WHERE_BINDS._2
+
+		val BODY =
+			(  "FROM " |:: FROM  join ", " ) +
+			(" WHERE " |:: WHERE join " AND ")
+
+		BINDS.view.map{v => v.value match {
+			case null => "NULL"
+			case args => "'" + v.value.toString.replaceAll("'", "\\'") + "'"
+		}}.foldLeft(BODY){_.replaceFirst("\\?", _)}
+	}
 
 	private def occ2escFull(occ: (Atom,Atom,Var)): String
 	= (sed.size match {
